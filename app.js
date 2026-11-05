@@ -1,4 +1,4 @@
-import * as api from "./api.js?v=11";
+import * as api from "./api.js?v=12";
 
 const CFG = window.APP_CONFIG;
 const P = CFG.PRICES;
@@ -101,7 +101,7 @@ function layout(body, { title, back, cta = "", wide = false, home = false, bell 
   $app.className = "app" + (wide ? " wide" : "");
   const bar = api.DEMO ? '<div class="demo-bar">체험 모드 · 이 기기에만 저장돼요 (config.js 에 Supabase 키를 넣으면 실제 서비스로 바뀌어요)</div>' : "";
   const head = home
-    ? `<header class="top"><span class="logo"><img src="logo.png?v=11" alt="에딧 커미션" style="height:34px;width:auto;display:block" /></span><a class="icon-btn bell" href="#/messages" aria-label="메시지">${ICON.chat.replace(/18/g, "22")}<span class="noti-badge" data-msg-badge hidden></span></a><a class="icon-btn bell" href="#/notifications" aria-label="알림">${ICON.bell}<span class="noti-badge" data-badge hidden></span></a><a class="icon-btn" href="#/me" aria-label="마이페이지">${ICON.user}</a></header>`
+    ? `<header class="top"><span class="logo"><img src="logo.png?v=12" alt="에딧 커미션" style="height:34px;width:auto;display:block" /></span><a class="icon-btn bell" href="#/messages" aria-label="메시지">${ICON.chat.replace(/18/g, "22")}<span class="noti-badge" data-msg-badge hidden></span></a><a class="icon-btn bell" href="#/notifications" aria-label="알림">${ICON.bell}<span class="noti-badge" data-badge hidden></span></a><a class="icon-btn" href="#/me" aria-label="마이페이지">${ICON.user}</a></header>`
     : `<header class="top">${back !== false ? `<button class="back" data-back aria-label="뒤로">${ICON.back}</button>` : ""}<h1>${esc(title || "")}</h1>${bell ? `<a class="icon-btn bell" href="#/notifications" aria-label="알림">${ICON.bell}<span class="noti-badge" data-badge hidden></span></a>` : ""}</header>`;
   $app.innerHTML = `${bar}${head}<main class="page">${body}</main>${cta ? `<div class="cta">${cta}</div>` : ""}`;
   $app.querySelector("[data-back]")?.addEventListener("click", () => {
@@ -138,6 +138,7 @@ function statusBadge(r) {
   if (r.status === "cancelled") return '<span class="badge red">취소됨</span>';
   if (r.status === "pending_review") return '<span class="badge gray">승인 대기</span>';
   if (r.status === "awaiting_payment") return '<span class="badge gray">입금 확인 중</span>';
+  if (r.stage >= 5 && r.client_note && r.revision_requested_at) return '<span class="badge">수정 요청</span>';
   if (r.stage >= 5 && r.delivery_url && r.received_at) return '<span class="badge green">받기 완료</span>';
   if (r.stage >= 5) return '<span class="badge green">납품 완료</span>';
   if (r.client_note && r.revision_requested_at) return '<span class="badge">수정 요청</span>';
@@ -152,7 +153,7 @@ function Login() {
   $app.innerHTML = `
     ${api.DEMO ? '<div class="demo-bar">체험 모드 · 버튼을 누르면 체험 계정으로 들어가요</div>' : ""}
     <div class="login">
-      <img src="logo.png?v=11" alt="에딧 커미션" style="height:64px;width:auto;align-self:flex-start" />
+      <img src="logo.png?v=12" alt="에딧 커미션" style="height:64px;width:auto;align-self:flex-start" />
       <h1>에딧 커미션,<br/>이제 걱정 없이 맡기세요</h1>
       <p class="muted" style="margin:0;color:#333">맡기는 순간부터 기념일 당일까지<br/>걱정 없이 맡기는 에딧 커미션</p>
       <div style="flex:1"></div>
@@ -176,7 +177,7 @@ function Login() {
 // ---------------------------------------------------------
 async function Home() {
   const [reqs, notices] = await Promise.all([api.listMyRequests(state.user), api.listNotices(2).catch(() => [])]);
-  const active = reqs.find((r) => r.status !== "cancelled" && r.stage < 5);
+  const active = reqs.find((r) => r.status !== "cancelled" && (r.stage < 5 || r.client_note));
   const p = state.profile || {};
 
   const activeCard = active ? `
@@ -277,7 +278,7 @@ function bindTempSave(d) {
 // 홈 화면용 진행판 (진행판과 같은 5단계)
 function boardBadge(r) {
   const label = r.status === "pending_review" ? "승인 대기" : r.status === "awaiting_payment" ? "입금 확인 중"
-    : r.stage >= 5 ? "납품 완료" : r.client_note && r.revision_requested_at ? "수정 요청" : STAGES[Math.max(0, r.stage - 1)];
+    : r.client_note && r.revision_requested_at ? "수정 요청" : r.stage >= 5 ? "납품 완료" : STAGES[Math.max(0, r.stage - 1)];
   return `<span class="board-badge">${esc(label)}</span>`;
 }
 function boardTrack(r) {
@@ -584,8 +585,15 @@ function deliveryCard(r) {
     <a class="btn btn-primary" href="${esc(url)}" target="_blank" rel="noopener noreferrer" style="margin-top:14px;text-decoration:none">영상 받기 (구글 드라이브)</a>
     ${r.received_at
       ? `<p class="muted small" style="text-align:center;margin:10px 0 0">${fmtDateTime(r.received_at)}에 받기 완료했어요</p>`
-      : `<button class="btn btn-outline" data-received style="margin-top:8px;height:46px;font-size:14px">잘 받았어요</button>
-         <p class="muted small" style="text-align:center;margin:8px 0 0">링크가 열리지 않으면 에디터에게 메시지로 알려 주세요</p>`}
+      : `<button class="btn btn-outline" data-received style="margin-top:8px;height:46px;font-size:14px">잘 받았어요</button>`}
+    ${r.status === "confirmed" ? `
+      ${r.client_note ? `<div class="notice" style="margin-top:10px"><b>수정 요청을 보냈어요</b> · 에디터가 고친 영상으로 다시 보내 드릴게요<br/>${esc(r.client_note)}</div>` : ""}
+      <button class="btn-text" data-dv-revise style="margin-top:4px;color:var(--accent);font-weight:700">${r.client_note ? "수정 요청 더 보내기" : "수정이 필요해요"}</button>
+      <div data-dv-revise-box hidden>
+        <textarea class="textarea" placeholder="어떤 부분을 바꾸고 싶은지 적어 주세요 (예: 0:32 자막 오타)" data-dv-note maxlength="2000"></textarea>
+        ${(r.revision_count || 0) >= CFG.FREE_REVISIONS ? `<p class="err">무료 수정 ${CFG.FREE_REVISIONS}회를 모두 사용했어요. 추가 수정은 에디터와 상의해 주세요.</p>` : `<p class="muted small" style="margin:6px 0 0">무료 수정 ${CFG.FREE_REVISIONS}회 중 ${r.revision_count || 0}회 사용</p>`}
+        <button class="btn btn-primary" style="height:46px;font-size:14px;margin-top:8px" data-dv-send>수정 요청 보내기</button>
+      </div>` : ""}
   </div>`;
 }
 
@@ -653,6 +661,14 @@ async function Progress(id) {
   on("[data-home]", "click", () => go("#/"));
   on("[data-received]", "click", async () => { await api.confirmReceived(id); toast("받기 완료! 에디터에게 알려 드렸어요"); Progress(id); });
   on("[data-approve]", "click", async () => { await api.approvePreview(id); toast("확인했어요. 다음 단계로 넘어갈게요"); Progress(id); });
+  on("[data-dv-revise]", "click", () => { const b = $app.querySelector("[data-dv-revise-box]"); b.hidden = !b.hidden; if (!b.hidden) b.querySelector("textarea").focus(); });
+  on("[data-dv-send]", "click", async (e) => {
+    const note = $app.querySelector("[data-dv-note]").value.trim();
+    if (!note) { toast("수정할 내용을 적어 주세요"); return; }
+    e.currentTarget.disabled = true;
+    try { await api.requestRevision(id, note); toast("수정 요청을 보냈어요 · 에디터에게 알림이 갔어요"); Progress(id); }
+    catch (err) { toast("보내지 못했어요: " + err.message); e.currentTarget.disabled = false; }
+  });
   on("[data-revise]", "click", () => { const b = $app.querySelector("[data-revise-box]"); b.hidden = !b.hidden; if (!b.hidden) b.querySelector("textarea").focus(); });
   on("[data-send-revise]", "click", async () => {
     const note = $app.querySelector("[data-note]").value.trim();
@@ -669,7 +685,7 @@ async function Progress(id) {
 async function MyPage() {
   const reqs = await api.listMyRequests(state.user);
   const p = state.profile || {};
-  const active = reqs.filter((r) => r.status !== "cancelled" && r.stage < 5);
+  const active = reqs.filter((r) => r.status !== "cancelled" && (r.stage < 5 || r.client_note));
   const ratio = p.default_ratio || "4:3";
   const initial = (p.nickname || "?").slice(0, 1);
   const avatarSrc = p.avatar_url && (p.avatar_url.startsWith("data:image/") ? p.avatar_url : safeUrl(p.avatar_url));
@@ -1207,6 +1223,7 @@ async function EditorDetail(id) {
         </div>` : ""}
       <input class="input" placeholder="완성본 구글 드라이브 링크" value="${esc(r.delivery_url || "")}" data-dv-url inputmode="url" />
       <textarea class="textarea field" style="height:80px" placeholder="의뢰인에게 남길 말 (예: 4K 원본과 자막 없는 버전도 함께 넣었어요)" data-dv-note>${esc(r.delivery_note || "")}</textarea>
+      ${r.delivery_url && r.client_note ? '<div class="notice" style="margin-top:10px">납품 후 수정 요청이 왔어요. 고친 영상의 <b>새 링크</b>로 다시 납품하면 의뢰인에게 알림이 가고 수정 요청은 반영 완료로 표시돼요.</div>' : ""}
       <p class="muted small" style="margin:8px 0 0">드라이브 공유 설정을 <b>"링크가 있는 모든 사용자"</b>로 바꿔야 의뢰인이 열 수 있어요.</p>
       <button class="btn btn-primary" style="margin-top:12px;height:48px;font-size:15px" data-deliver>${r.delivery_url ? "납품 링크 다시 보내기" : "납품하기"}</button>
     </div>
@@ -1238,6 +1255,12 @@ async function EditorDetail(id) {
 
     <div class="section-title">메모 (나만 보기)</div>
     <textarea class="textarea" placeholder="작업 메모" data-memo>${esc(r.editor_memo || "")}</textarea>
+
+    <div class="section-title">요청서 삭제</div>
+    <div class="card">
+      <p class="muted small" style="margin:0 0 10px">요청서와 이 요청서의 메시지·알림이 모두 지워지고 되돌릴 수 없어요. 의뢰인 화면에서도 사라져요.</p>
+      <button class="btn-mini danger" data-delete-req>요청서 삭제하기</button>
+    </div>
   `, { title: "요청서", back: "#/editor", wide: true, bell: true, cta: '<button class="btn btn-primary" data-save>저장하기</button>' });
   mountChat(id, { mineIsEditor: true });
 
@@ -1252,6 +1275,14 @@ async function EditorDetail(id) {
   });
   on("[data-cancel]", "click", () => { if (confirm("이 의뢰를 취소 처리할까요? 환불은 직접 해 주세요.")) upd({ status: "cancelled" }, "취소 처리했어요"); });
   on("[data-restore]", "click", () => upd({ status: r.stage > 0 ? "confirmed" : r.approved_at ? "awaiting_payment" : "pending_review", cancel_reason: null }, "취소를 되돌렸어요"));
+  on("[data-delete-req]", "click", async (e) => {
+    const typed = prompt(`"${titleOf(r)}" 요청서를 삭제해요.\n되돌릴 수 없어요. 정말 지우려면 삭제 라고 입력해 주세요.`);
+    if (typed === null) return;
+    if (typed.trim() !== "삭제") { toast("삭제 라고 입력해야 지워져요"); return; }
+    e.currentTarget.disabled = true;
+    try { await api.deleteRequest(id); toast("요청서를 삭제했어요"); go("#/editor"); }
+    catch (err) { toast("삭제하지 못했어요: " + err.message); e.currentTarget.disabled = false; }
+  });
   on("[data-approve-req]", "click", () => {
     if (!confirm("이 요청서를 승인할까요? 의뢰인에게 입금 계좌가 보여요.")) return;
     upd({ status: "awaiting_payment", approved_at: new Date().toISOString() }, "승인했어요 · 의뢰인에게 계좌가 열렸어요");
@@ -1268,8 +1299,15 @@ async function EditorDetail(id) {
     if (!confirm("이 링크로 납품할까요? 의뢰인에게 알림이 가요.")) return;
     const t = isoDay(today());
     for (let k = 1; k <= 5; k++) { sd[k] = { ...(sd[k] || {}) }; if (!sd[k].done) sd[k].done = t; }
-    upd({ delivery_url: url, delivery_note: note || null, delivered_at: new Date().toISOString(), received_at: url === r.delivery_url ? r.received_at : null,
-      stage: 5, stage_dates: sd, status: "confirmed" }, "납품했어요 · 의뢰인에게 알림이 갔어요");
+    const now = new Date().toISOString();
+    const patch = { delivery_url: url, delivery_note: note || null, delivered_at: now, received_at: url === r.delivery_url ? r.received_at : null,
+      stage: 5, stage_dates: sd, status: "confirmed" };
+    if (r.client_note && url !== r.delivery_url) {
+      patch.revision_history = (r.revision_history || []).map((h) => ({ ...h, resolved_at: h.resolved_at || now }));
+      if (!patch.revision_history.length) patch.revision_history = [{ n: r.revision_count, note: r.client_note, at: r.revision_requested_at || now, resolved_at: now }];
+      patch.client_note = null; patch.revision_requested_at = null;
+    }
+    upd(patch, patch.client_note === null ? "수정본을 납품했어요 · 수정 요청도 반영 완료로 표시했어요" : "납품했어요 · 의뢰인에게 알림이 갔어요");
   });
   on("[data-clear-note]", "click", () => {
     const now = new Date().toISOString();

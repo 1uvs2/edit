@@ -267,6 +267,20 @@ export async function listAllRequests() {
     .order("created_at", { ascending: false }));
 }
 
+export async function deleteRequest(id) {
+  if (DEMO) {
+    const s = load();
+    s.requests = s.requests.filter((r) => r.id !== id);
+    s.messages = (s.messages || []).filter((m) => m.request_id !== id);
+    s.notifications = (s.notifications || []).filter((n) => n.request_id !== id);
+    save(s);
+    return;
+  }
+  const { data, error } = await sb.from("requests").delete().eq("id", id).select("id");
+  if (error) throw new Error(error.message);
+  if (!data || !data.length) throw new Error("삭제 권한이 없거나 이미 지워졌어요. 9차 SQL을 실행했는지 확인해 주세요.");
+}
+
 export async function editorUpdate(id, patch) {
   if (DEMO) {
     const s = load();
