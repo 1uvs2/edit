@@ -194,6 +194,20 @@ export async function approvePreview(id) {
   check(await sb.rpc("approve_preview", { rid: id }));
 }
 
+export async function confirmReceived(id) {
+  if (DEMO) {
+    const s = load();
+    const r = s.requests.find((x) => x.id === id);
+    if (r && r.delivery_url && !r.received_at) {
+      r.received_at = new Date().toISOString();
+      demoNotify(s, "demo-me", { request_id: r.id, kind: "received", title: "의뢰인이 영상을 받았어요", body: demoTitle(r), link: `#/editor/${r.id}` });
+    }
+    save(s);
+    return;
+  }
+  check(await sb.rpc("confirm_received", { rid: id }));
+}
+
 export async function requestRevision(id, note) {
   if (DEMO) {
     const s = load();
@@ -231,8 +245,10 @@ export async function editorUpdate(id, patch) {
     r.total = demoTotal(r);
     s.requests[i] = r;
     const ttl = demoTitle(r), link = `#/request/${r.id}`;
+    const deliveredNow = r.delivery_url && r.delivery_url !== old.delivery_url;
+    if (deliveredNow) demoNotify(s, r.user_id, { request_id: r.id, kind: "delivered", title: "완성된 영상이 도착했어요", body: `${ttl} · 진행판에서 영상을 받아 주세요`, link });
     if (old.status !== "confirmed" && r.status === "confirmed") demoNotify(s, r.user_id, { request_id: r.id, kind: "confirmed", title: "입금이 확인됐어요", body: `${ttl} 작업을 시작할게요`, link });
-    else if (r.stage !== old.stage && r.stage > 0) demoNotify(s, r.user_id, { request_id: r.id, kind: "stage", title: r.stage === 5 ? "에딧이 납품됐어요" : "진행 상황이 바뀌었어요", body: `${ttl} · ${STAGE_NAMES[r.stage]}${r.stage === 5 ? " 완료" : " 단계 진행 중"}`, link });
+    else if (r.stage !== old.stage && r.stage > 0 && !(deliveredNow && r.stage === 5)) demoNotify(s, r.user_id, { request_id: r.id, kind: "stage", title: r.stage === 5 ? "에딧이 납품됐어요" : "진행 상황이 바뀌었어요", body: `${ttl} · ${STAGE_NAMES[r.stage]}${r.stage === 5 ? " 완료" : " 단계 진행 중"}`, link });
     if (r.preview_url && r.preview_url !== old.preview_url) demoNotify(s, r.user_id, { request_id: r.id, kind: "preview", title: "새 미리보기가 도착했어요", body: r.preview_label || ttl, link });
     if (r.status === "cancelled" && old.status !== "cancelled") demoNotify(s, r.user_id, { request_id: r.id, kind: "cancelled", title: "의뢰가 취소되었어요", body: ttl, link });
     save(s);

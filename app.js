@@ -1,4 +1,4 @@
-import * as api from "./api.js?v=4";
+import * as api from "./api.js?v=5";
 
 const CFG = window.APP_CONFIG;
 const P = CFG.PRICES;
@@ -101,7 +101,7 @@ function layout(body, { title, back, cta = "", wide = false, home = false, bell 
   $app.className = "app" + (wide ? " wide" : "");
   const bar = api.DEMO ? '<div class="demo-bar">체험 모드 · 이 기기에만 저장돼요 (config.js 에 Supabase 키를 넣으면 실제 서비스로 바뀌어요)</div>' : "";
   const head = home
-    ? `<header class="top"><span class="logo"><img src="logo.png?v=4" alt="에딧 커미션" style="height:34px;width:auto;display:block" /></span><a class="icon-btn bell" href="#/messages" aria-label="메시지">${ICON.chat.replace(/18/g, "22")}<span class="noti-badge" data-msg-badge hidden></span></a><a class="icon-btn bell" href="#/notifications" aria-label="알림">${ICON.bell}<span class="noti-badge" data-badge hidden></span></a><a class="icon-btn" href="#/me" aria-label="마이페이지">${ICON.user}</a></header>`
+    ? `<header class="top"><span class="logo"><img src="logo.png?v=5" alt="에딧 커미션" style="height:34px;width:auto;display:block" /></span><a class="icon-btn bell" href="#/messages" aria-label="메시지">${ICON.chat.replace(/18/g, "22")}<span class="noti-badge" data-msg-badge hidden></span></a><a class="icon-btn bell" href="#/notifications" aria-label="알림">${ICON.bell}<span class="noti-badge" data-badge hidden></span></a><a class="icon-btn" href="#/me" aria-label="마이페이지">${ICON.user}</a></header>`
     : `<header class="top">${back !== false ? `<button class="back" data-back aria-label="뒤로">${ICON.back}</button>` : ""}<h1>${esc(title || "")}</h1>${bell ? `<a class="icon-btn bell" href="#/notifications" aria-label="알림">${ICON.bell}<span class="noti-badge" data-badge hidden></span></a>` : ""}</header>`;
   $app.innerHTML = `${bar}${head}<main class="page">${body}</main>${cta ? `<div class="cta">${cta}</div>` : ""}`;
   $app.querySelector("[data-back]")?.addEventListener("click", () => {
@@ -135,6 +135,7 @@ function bindCopy() { on("[data-copy]", "click", () => copy(CFG.BANK.number.repl
 function statusBadge(r) {
   if (r.status === "cancelled") return '<span class="badge red">취소됨</span>';
   if (r.status === "awaiting_payment") return '<span class="badge gray">입금 확인 중</span>';
+  if (r.stage >= 5 && r.delivery_url && r.received_at) return '<span class="badge green">받기 완료</span>';
   if (r.stage >= 5) return '<span class="badge green">납품 완료</span>';
   if (r.client_note && r.revision_requested_at) return '<span class="badge">수정 요청</span>';
   return `<span class="badge">${STAGES[Math.max(0, r.stage - 1)]}</span>`;
@@ -148,7 +149,7 @@ function Login() {
   $app.innerHTML = `
     ${api.DEMO ? '<div class="demo-bar">체험 모드 · 버튼을 누르면 체험 계정으로 들어가요</div>' : ""}
     <div class="login">
-      <img src="logo.png?v=4" alt="에딧 커미션" style="height:64px;width:auto;align-self:flex-start" />
+      <img src="logo.png?v=5" alt="에딧 커미션" style="height:64px;width:auto;align-self:flex-start" />
       <h1>에딧 커미션,<br/>이제 걱정 없이 맡기세요</h1>
       <p class="muted" style="margin:0;color:#333">맡기는 순간부터 기념일 당일까지<br/>걱정 없이 맡기는 에딧 커미션</p>
       <div style="flex:1"></div>
@@ -187,6 +188,12 @@ async function Home() {
     </a>` : `
     <div class="card"><div class="title-m">진행 중인 의뢰</div><p class="muted" style="margin:8px 0 0">아직 진행 중인 의뢰가 없어요. 아래 버튼으로 첫 에딧을 맡겨 보세요.</p></div>`;
 
+  const delivered = reqs.filter((r) => r.delivery_url && !r.received_at);
+  const deliveredCards = delivered.map((r) => `
+    <a class="card delivery" href="#/request/${esc(r.id)}" style="display:block;text-decoration:none;margin-bottom:12px">
+      <div class="row"><b>🎁 완성된 영상이 도착했어요</b>${ICON.right}</div>
+      <div class="muted small ellipsis" style="margin-top:4px">${esc(titleOf(r))} · 눌러서 영상 받기</div>
+    </a>`).join("");
   const draftCard = p.draft ? `
     <div class="card" style="margin-top:12px;border:1.5px dashed #f2b9ee;box-shadow:none">
       <div class="row"><b>임시저장한 요청서가 있어요</b><span class="muted small">${fmtDateTime(p.draft_saved_at)}</span></div>
@@ -201,6 +208,7 @@ async function Home() {
     <div class="row"><span><b>${t.label}</b> <span class="small">${esc(t.title.split("· ")[1])} [${esc(t.desc)}]</span></span><b class="nowrap">${won(P[k])}</b></div>`).join("");
 
   layout(`
+    ${deliveredCards}
     ${activeCard}
     ${draftCard}
     <div class="card" style="margin-top:22px">
@@ -525,6 +533,20 @@ function stepsHtml(r) {
   }).join("")}</ol>`;
 }
 
+function deliveryCard(r) {
+  const url = safeUrl(r.delivery_url);
+  if (!url) return "";
+  return `<div class="card delivery" style="margin-top:12px">
+    <div class="row"><b class="title-m">🎁 완성된 영상이 도착했어요</b><span class="muted small nowrap">${fmtDateTime(r.delivered_at)}</span></div>
+    ${r.delivery_note ? `<div class="notice" style="margin-top:10px;white-space:pre-wrap">${esc(r.delivery_note)}</div>` : ""}
+    <a class="btn btn-primary" href="${esc(url)}" target="_blank" rel="noopener noreferrer" style="margin-top:14px;text-decoration:none">영상 받기 (구글 드라이브)</a>
+    ${r.received_at
+      ? `<p class="muted small" style="text-align:center;margin:10px 0 0">${fmtDateTime(r.received_at)}에 받기 완료했어요</p>`
+      : `<button class="btn btn-outline" data-received style="margin-top:8px;height:46px;font-size:14px">잘 받았어요</button>
+         <p class="muted small" style="text-align:center;margin:8px 0 0">링크가 열리지 않으면 에디터에게 메시지로 알려 주세요</p>`}
+  </div>`;
+}
+
 async function Progress(id) {
   const r = await api.getRequest(id);
   if (!r) { layout('<div class="empty">요청서를 찾을 수 없어요</div>', { title: "진행 중인 의뢰", back: "#/" }); return; }
@@ -573,6 +595,7 @@ async function Progress(id) {
       </div>
       <div class="pill-date"><span class="small">납품 예정</span><span class="bold">${fmtDate(r.upload_date)}</span></div>
     </div>
+    ${deliveryCard(r)}
     ${banner}
     <a class="btn btn-outline" href="#/chat/${esc(r.id)}" style="margin-top:12px;height:48px;font-size:15px;text-decoration:none">${ICON.chat} 에디터에게 메시지 보내기</a>
     <div class="section-title">현재 진행 상황</div>
@@ -582,6 +605,7 @@ async function Progress(id) {
 
   bindCopy();
   on("[data-home]", "click", () => go("#/"));
+  on("[data-received]", "click", async () => { await api.confirmReceived(id); toast("받기 완료! 에디터에게 알려 드렸어요"); Progress(id); });
   on("[data-approve]", "click", async () => { await api.approvePreview(id); toast("확인했어요. 다음 단계로 넘어갈게요"); Progress(id); });
   on("[data-revise]", "click", () => { const b = $app.querySelector("[data-revise-box]"); b.hidden = !b.hidden; if (!b.hidden) b.querySelector("textarea").focus(); });
   on("[data-send-revise]", "click", async () => {
@@ -663,7 +687,7 @@ async function MyPage() {
 // ---------------------------------------------------------
 // 알림함
 // ---------------------------------------------------------
-const NOTI_ICON = { message: "💬", stage: "🎬", confirmed: "✅", preview: "👀", cancelled: "⚠️", new_request: "📩", revision: "✏️", approved: "💗" };
+const NOTI_ICON = { message: "💬", stage: "🎬", confirmed: "✅", preview: "👀", cancelled: "⚠️", new_request: "📩", revision: "✏️", approved: "💗", delivered: "🎁", received: "📦" };
 async function Notifications() {
   const list = await api.listNotifications(state.user);
   layout(`
@@ -870,6 +894,17 @@ async function EditorDetail(id) {
         <input type="date" value="${esc(sd[i + 1]?.plan || "")}" data-plan="${i + 1}" aria-label="${n} 예정일" /></div>`).join("")}
     </div>
 
+    <div class="section-title">납품하기</div>
+    <div class="card">
+      ${r.delivery_url ? `<div class="notice" style="margin-bottom:12px">
+          <b>${fmtDateTime(r.delivered_at)} 납품 완료</b> · ${r.received_at ? `의뢰인이 ${fmtDateTime(r.received_at)}에 받았어요` : "의뢰인이 아직 확인 전이에요"}
+        </div>` : ""}
+      <input class="input" placeholder="완성본 구글 드라이브 링크" value="${esc(r.delivery_url || "")}" data-dv-url inputmode="url" />
+      <textarea class="textarea field" style="height:80px" placeholder="의뢰인에게 남길 말 (예: 4K 원본과 자막 없는 버전도 함께 넣었어요)" data-dv-note>${esc(r.delivery_note || "")}</textarea>
+      <p class="muted small" style="margin:8px 0 0">드라이브 공유 설정을 <b>"링크가 있는 모든 사용자"</b>로 바꿔야 의뢰인이 열 수 있어요.</p>
+      <button class="btn btn-primary" style="margin-top:12px;height:48px;font-size:15px" data-deliver>${r.delivery_url ? "납품 링크 다시 보내기" : "납품하기"}</button>
+    </div>
+
     <div class="section-title">미리보기 보내기</div>
     <div class="card">
       <input class="input" placeholder="제목 (예: 효과 추가 단계 미리 보기)" value="${esc(r.preview_label || "")}" data-pv-label />
@@ -910,6 +945,16 @@ async function EditorDetail(id) {
   });
   on("[data-cancel]", "click", () => { if (confirm("이 의뢰를 취소 처리할까요? 환불은 직접 해 주세요.")) upd({ status: "cancelled" }, "취소 처리했어요"); });
   on("[data-restore]", "click", () => upd({ status: r.stage > 0 ? "confirmed" : "awaiting_payment" }, "취소를 되돌렸어요"));
+  on("[data-deliver]", "click", () => {
+    const url = $app.querySelector("[data-dv-url]").value.trim();
+    const note = $app.querySelector("[data-dv-note]").value.trim();
+    if (!safeUrl(url)) { toast("https:// 로 시작하는 드라이브 링크를 넣어 주세요"); return; }
+    if (!confirm("이 링크로 납품할까요? 의뢰인에게 알림이 가요.")) return;
+    const t = isoDay(today());
+    for (let k = 1; k <= 5; k++) { sd[k] = { ...(sd[k] || {}) }; if (!sd[k].done) sd[k].done = t; }
+    upd({ delivery_url: url, delivery_note: note || null, delivered_at: new Date().toISOString(), received_at: url === r.delivery_url ? r.received_at : null,
+      stage: 5, stage_dates: sd, status: "confirmed" }, "납품했어요 · 의뢰인에게 알림이 갔어요");
+  });
   on("[data-clear-note]", "click", () => upd({ client_note: null, revision_requested_at: null }, "수정 요청을 닫았어요"));
   on("[data-save]", "click", () => {
     const stage = Number($app.querySelector("[data-stage]").value);

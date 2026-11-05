@@ -287,3 +287,4 @@ input[type="date"] { min-width: 0; max-width: 100%; }
 .seg-btn.on { background: #fff; color: var(--text); box-shadow: 0 2px 8px rgba(0,0,0,.06); }
 .count-pill { min-width: 20px; height: 20px; padding: 0 6px; border-radius: 20px; background: #ff4f8b; color: #fff; font-size: 11px; font-weight: 700; display: inline-grid; place-items: center; flex: none; }
 .inbox-row { padding: 16px 20px; }
+.card.delivery { border: 2px solid var(--accent); background: linear-gradient(180deg, #fff 0%, #fff6fe 100%); }
