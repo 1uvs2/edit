@@ -33,7 +33,7 @@ function load() {
     const s = JSON.parse(localStorage.getItem(KEY));
     if (s) return s;
   } catch {}
-  return { user: null, profiles: {}, requests: [], anniversaries: [] };
+  return { user: null, profiles: {}, requests: [], notifications: [], messages: [] };
 }
 function save(s) {
   try { localStorage.setItem(KEY, JSON.stringify(s)); } catch {}
@@ -84,10 +84,6 @@ export async function loginWithKakao() {
       id: "demo-me", nickname: "체험 사용자", default_ratio: "4:3",
       default_bias: "", default_credit: "",
     };
-    if (!s.anniversaries.length) {
-      const soon = new Date(Date.now() + 20 * 86400000).toISOString().slice(0, 10);
-      s.anniversaries.push({ id: uid(), user_id: "demo-me", title: "[멤버] 생일", date: soon, notify: true });
-    }
     seedOther(s);
     save(s);
     return;
@@ -178,6 +174,8 @@ export async function createRequest(user, draft) {
     };
     r.total = demoTotal(r);
     s.requests.push(r);
+    demoNotify(s, user.id, { request_id: r.id, kind: "new_request", title: "새 요청서가 들어왔어요",
+      body: `${demoTitle(r)} · ${r.total.toLocaleString("ko-KR")}원 · 입금자 ${r.depositor || "-"}`, link: `#/editor/${r.id}` });
     save(s);
     return r;
   }
@@ -203,6 +201,8 @@ export async function requestRevision(id, note) {
     r.revision_count = (r.revision_count || 0) + 1;
     r.client_note = note;
     r.revision_requested_at = new Date().toISOString();
+    demoNotify(s, r.user_id, { request_id: r.id, kind: "revision", title: "수정 요청이 왔어요",
+      body: `${demoTitle(r)} · ${note.slice(0, 80)}`, link: `#/editor/${r.id}` });
     save(s);
     return;
   }
@@ -226,8 +226,15 @@ export async function editorUpdate(id, patch) {
   if (DEMO) {
     const s = load();
     const i = s.requests.findIndex((x) => x.id === id);
-    s.requests[i] = { ...s.requests[i], ...patch };
-    s.requests[i].total = demoTotal(s.requests[i]);
+    const old = s.requests[i];
+    const r = { ...old, ...patch };
+    r.total = demoTotal(r);
+    s.requests[i] = r;
+    const ttl = demoTitle(r), link = `#/request/${r.id}`;
+    if (old.status !== "confirmed" && r.status === "confirmed") demoNotify(s, r.user_id, { request_id: r.id, kind: "confirmed", title: "입금이 확인됐어요", body: `${ttl} 작업을 시작할게요`, link });
+    else if (r.stage !== old.stage && r.stage > 0) demoNotify(s, r.user_id, { request_id: r.id, kind: "stage", title: r.stage === 5 ? "에딧이 납품됐어요" : "진행 상황이 바뀌었어요", body: `${ttl} · ${STAGE_NAMES[r.stage]}${r.stage === 5 ? " 완료" : " 단계 진행 중"}`, link });
+    if (r.preview_url && r.preview_url !== old.preview_url) demoNotify(s, r.user_id, { request_id: r.id, kind: "preview", title: "새 미리보기가 도착했어요", body: r.preview_label || ttl, link });
+    if (r.status === "cancelled" && old.status !== "cancelled") demoNotify(s, r.user_id, { request_id: r.id, kind: "cancelled", title: "의뢰가 취소되었어요", body: ttl, link });
     save(s);
     return s.requests[i];
   }
@@ -235,43 +242,114 @@ export async function editorUpdate(id, patch) {
 }
 
 // ---------------------------------------------------------
-// 기념일
+// 임시저장 (계정에 저장)
 // ---------------------------------------------------------
-export async function listAnniversaries(user) {
-  if (DEMO) return load().anniversaries.filter((a) => a.user_id === user.id);
-  return check(await sb.from("anniversaries").select("*").eq("user_id", user.id).order("date"));
-}
-
-export async function addAnniversary(user, a) {
+export async function saveDraftRemote(user, draft) {
+  const patch = { draft, draft_saved_at: new Date().toISOString() };
   if (DEMO) {
     const s = load();
-    const row = { id: uid(), user_id: user.id, notify: true, ...a };
-    s.anniversaries.push(row);
+    s.profiles[user.id] = { ...s.profiles[user.id], ...patch };
     save(s);
-    return row;
+    return s.profiles[user.id];
   }
-  return check(await sb.from("anniversaries").insert({ title: a.title, date: a.date, notify: true }).select().single());
+  return check(await sb.from("profiles").update(patch).eq("id", user.id).select().single());
 }
 
-export async function updateAnniversary(id, patch) {
+export async function clearDraftRemote(user) {
+  const patch = { draft: null, draft_saved_at: null };
   if (DEMO) {
     const s = load();
-    const a = s.anniversaries.find((x) => x.id === id);
-    Object.assign(a, patch);
+    s.profiles[user.id] = { ...s.profiles[user.id], ...patch };
     save(s);
-    return a;
+    return s.profiles[user.id];
   }
-  return check(await sb.from("anniversaries").update(patch).eq("id", id).select().single());
+  return check(await sb.from("profiles").update(patch).eq("id", user.id).select().single());
 }
 
-export async function deleteAnniversary(id) {
+// ---------------------------------------------------------
+// 알림
+// ---------------------------------------------------------
+function demoNotify(s, userId, n) {
+  s.notifications = s.notifications || [];
+  s.notifications.push({ id: uid(), user_id: userId, created_at: new Date().toISOString(), read_at: null, ...n });
+}
+const STAGE_NAMES = ["시작 전", "요청 확인", "컷 편집", "효과 추가", "후반 작업", "납품"];
+const demoTitle = (r) => `${r.member || "[멤버]"} ${r.occasion || ""} 에딧`.replace(/\s+/g, " ").trim();
+
+export async function listNotifications(user) {
+  if (DEMO) {
+    return (load().notifications || []).filter((n) => n.user_id === user.id)
+      .sort((a, b) => b.created_at.localeCompare(a.created_at)).slice(0, 100);
+  }
+  return check(await sb.from("notifications").select("*").eq("user_id", user.id)
+    .order("created_at", { ascending: false }).limit(100));
+}
+
+export async function unreadCount(user) {
+  if (DEMO) return (load().notifications || []).filter((n) => n.user_id === user.id && !n.read_at).length;
+  const { count, error } = await sb.from("notifications").select("id", { count: "exact", head: true })
+    .eq("user_id", user.id).is("read_at", null);
+  if (error) return 0;
+  return count || 0;
+}
+
+export async function markAllRead(user) {
+  const now = new Date().toISOString();
   if (DEMO) {
     const s = load();
-    s.anniversaries = s.anniversaries.filter((x) => x.id !== id);
+    (s.notifications || []).forEach((n) => { if (n.user_id === user.id && !n.read_at) n.read_at = now; });
     save(s);
     return;
   }
-  check(await sb.from("anniversaries").delete().eq("id", id));
+  await sb.from("notifications").update({ read_at: now }).eq("user_id", user.id).is("read_at", null);
+}
+
+// 새 알림/메시지가 생기면 cb 실행 (실제 서비스: 실시간, 체험 모드: 없음)
+let channels = [];
+export function subscribe(user, { onNotification, onMessage } = {}) {
+  if (DEMO || !user) return () => {};
+  const ch = sb.channel("live-" + user.id + "-" + Math.random().toString(36).slice(2));
+  if (onNotification) {
+    ch.on("postgres_changes", { event: "INSERT", schema: "public", table: "notifications", filter: `user_id=eq.${user.id}` },
+      (p) => onNotification(p.new));
+  }
+  if (onMessage) {
+    ch.on("postgres_changes", { event: "INSERT", schema: "public", table: "messages" }, (p) => onMessage(p.new));
+  }
+  ch.subscribe();
+  channels.push(ch);
+  return () => { sb.removeChannel(ch); channels = channels.filter((c) => c !== ch); };
+}
+
+// ---------------------------------------------------------
+// 메시지
+// ---------------------------------------------------------
+export async function listMessages(requestId) {
+  if (DEMO) {
+    return (load().messages || []).filter((m) => m.request_id === requestId)
+      .sort((a, b) => a.created_at.localeCompare(b.created_at));
+  }
+  return check(await sb.from("messages").select("*").eq("request_id", requestId)
+    .order("created_at", { ascending: true }));
+}
+
+export async function sendMessage(user, requestId, body) {
+  if (DEMO) {
+    const s = load();
+    s.messages = s.messages || [];
+    const m = { id: uid(), request_id: requestId, sender_id: user.id, body, created_at: new Date().toISOString() };
+    s.messages.push(m);
+    const r = s.requests.find((x) => x.id === requestId);
+    if (r) {
+      const fromClient = r.user_id === user.id && !location.hash.startsWith("#/editor");
+      demoNotify(s, user.id, fromClient
+        ? { request_id: r.id, kind: "message", title: "새 메시지가 왔어요", body: `${demoTitle(r)} · ${body.slice(0, 80)}`, link: `#/editor/${r.id}` }
+        : { request_id: r.id, kind: "message", title: "에디터가 메시지를 보냈어요", body: body.slice(0, 80), link: `#/chat/${r.id}` });
+    }
+    save(s);
+    return m;
+  }
+  return check(await sb.from("messages").insert({ request_id: requestId, body }).select().single());
 }
 
 export function resetDemo() {

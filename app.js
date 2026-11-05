@@ -1,4 +1,4 @@
-import * as api from "./api.js";
+import * as api from "./api.js?v=3";
 
 const CFG = window.APP_CONFIG;
 const P = CFG.PRICES;
@@ -60,6 +60,8 @@ async function copy(text) {
 const go = (h) => { if (location.hash === h) render(); else location.hash = h; };
 
 const ICON = {
+  bell: '<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8a6 6 0 10-12 0c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.7 21a2 2 0 01-3.4 0"/></svg>',
+  chat: '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a8 8 0 01-11.8 7L4 20l1.2-4.4A8 8 0 1121 12z"/></svg>',
   back: '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"/></svg>',
   right: '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18l6-6-6-6"/></svg>',
   user: '<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="8" r="4"/><path d="M4 21c1.5-4 4.5-6 8-6s6.5 2 8 6"/></svg>',
@@ -95,17 +97,25 @@ function setDraft(d) { try { sessionStorage.setItem(DKEY, JSON.stringify(d)); } 
 function clearDraft() { try { sessionStorage.removeItem(DKEY); } catch {} }
 
 // 화면 틀
-function layout(body, { title, back, cta = "", wide = false, home = false } = {}) {
+function layout(body, { title, back, cta = "", wide = false, home = false, bell = false } = {}) {
   $app.className = "app" + (wide ? " wide" : "");
   const bar = api.DEMO ? '<div class="demo-bar">체험 모드 · 이 기기에만 저장돼요 (config.js 에 Supabase 키를 넣으면 실제 서비스로 바뀌어요)</div>' : "";
   const head = home
-    ? `<header class="top"><span class="logo"><img src="logo.png" alt="에딧 커미션" style="height:34px;width:auto;display:block" /></span><a class="icon-btn" href="#/me" aria-label="마이페이지">${ICON.user}</a></header>`
-    : `<header class="top">${back !== false ? `<button class="back" data-back aria-label="뒤로">${ICON.back}</button>` : ""}<h1>${esc(title || "")}</h1></header>`;
+    ? `<header class="top"><span class="logo"><img src="logo.png?v=3" alt="에딧 커미션" style="height:34px;width:auto;display:block" /></span><a class="icon-btn bell" href="#/notifications" aria-label="알림">${ICON.bell}<span class="noti-badge" data-badge hidden></span></a><a class="icon-btn" href="#/me" aria-label="마이페이지">${ICON.user}</a></header>`
+    : `<header class="top">${back !== false ? `<button class="back" data-back aria-label="뒤로">${ICON.back}</button>` : ""}<h1>${esc(title || "")}</h1>${bell ? `<a class="icon-btn bell" href="#/notifications" aria-label="알림">${ICON.bell}<span class="noti-badge" data-badge hidden></span></a>` : ""}</header>`;
   $app.innerHTML = `${bar}${head}<main class="page">${body}</main>${cta ? `<div class="cta">${cta}</div>` : ""}`;
   $app.querySelector("[data-back]")?.addEventListener("click", () => {
     if (typeof back === "string") go(back); else history.length > 1 ? history.back() : go("#/");
   });
   window.scrollTo(0, 0);
+  refreshBadge();
+}
+async function refreshBadge() {
+  const el = $app.querySelector("[data-badge]");
+  if (!el || !state.user) return;
+  const n = await api.unreadCount(state.user).catch(() => 0);
+  el.hidden = !n;
+  el.textContent = n > 9 ? "9+" : String(n);
 }
 function on(sel, ev, fn) { $app.querySelectorAll(sel).forEach((el) => el.addEventListener(ev, fn)); }
 
@@ -134,7 +144,7 @@ function Login() {
   $app.innerHTML = `
     ${api.DEMO ? '<div class="demo-bar">체험 모드 · 버튼을 누르면 체험 계정으로 들어가요</div>' : ""}
     <div class="login">
-      <img src="logo.png" alt="에딧 커미션" style="height:64px;width:auto;align-self:flex-start" />
+      <img src="logo.png?v=3" alt="에딧 커미션" style="height:64px;width:auto;align-self:flex-start" />
       <h1>에딧 커미션,<br/>이제 걱정 없이 맡기세요</h1>
       <p class="muted" style="margin:0;color:#333">맡기는 순간부터 기념일 당일까지<br/>걱정 없이 맡기는 에딧 커미션</p>
       <div style="flex:1"></div>
@@ -157,13 +167,9 @@ function Login() {
 // 홈
 // ---------------------------------------------------------
 async function Home() {
-  const [reqs, annis] = await Promise.all([api.listMyRequests(state.user), api.listAnniversaries(state.user)]);
+  const reqs = await api.listMyRequests(state.user);
   const active = reqs.find((r) => r.status !== "cancelled" && r.stage < 5);
   const p = state.profile || {};
-  const upcoming = annis.filter((a) => a.notify)
-    .map((a) => ({ ...a, next: nextOccurrence(a.date) }))
-    .filter((a) => a.next && (a.next - today()) / 86400000 <= 30)
-    .sort((a, b) => a.next - b.next)[0];
 
   const activeCard = active ? `
     <a class="card" href="#/request/${esc(active.id)}" style="display:block;text-decoration:none">
@@ -177,20 +183,30 @@ async function Home() {
     </a>` : `
     <div class="card"><div class="title-m">진행 중인 의뢰</div><p class="muted" style="margin:8px 0 0">아직 진행 중인 의뢰가 없어요. 아래 버튼으로 첫 에딧을 맡겨 보세요.</p></div>`;
 
+  const draftCard = p.draft ? `
+    <div class="card" style="margin-top:12px;border:1.5px dashed #f2b9ee;box-shadow:none">
+      <div class="row"><b>임시저장한 요청서가 있어요</b><span class="muted small">${fmtDateTime(p.draft_saved_at)}</span></div>
+      <div class="muted small ellipsis" style="margin-top:4px">${esc(titleOf(p.draft))}${p.draft.song ? " · " + esc(p.draft.song) : ""}</div>
+      <div class="grid-2" style="margin-top:12px">
+        <button class="btn-sub" data-draft-continue>이어서 쓰기</button>
+        <button class="btn-sub" style="background:#f3f3f3" data-draft-delete>삭제</button>
+      </div>
+    </div>` : "";
+
   const priceRows = Object.entries(TYPES).map(([k, t]) => `
     <div class="row"><span><b>${t.label}</b> <span class="small">${esc(t.title.split("· ")[1])} [${esc(t.desc)}]</span></span><b class="nowrap">${won(P[k])}</b></div>`).join("");
 
-  const n = upcoming ? Math.round((upcoming.next - today()) / 86400000) : null;
   layout(`
     ${activeCard}
+    ${draftCard}
     <div class="card" style="margin-top:22px">
       <div class="title-m" style="margin-bottom:4px">가격</div>
       <div class="rows">${priceRows}</div>
-      <p class="muted small" style="margin:8px 0 0">옵션 추가 별도 · 분량 5초당 ${won(P.per5sec)}</p>
+      <p class="muted small" style="margin:8px 0 0">옵션 추가 별도</p>
     </div>
     <div class="section-title">내 카드</div>
     <div class="card">
-      <div style="margin-bottom:6px">${upcoming ? `${esc(upcoming.title)}까지 ${n === 0 ? "D-day" : "D-" + n}! 새 요청서에 아래 값이 미리 채워져요` : "새 요청서에 아래 값이 미리 채워져요"}</div>
+      <div style="margin-bottom:6px">새 요청서에 아래 값이 미리 채워져요</div>
       <div class="rows">
         <div class="row"><span class="muted">최애</span><b>${esc(p.default_bias || "미설정")}</b></div>
         <div class="row"><span class="muted">규격</span><b>${esc(p.default_ratio || "4:3")}</b></div>
@@ -198,8 +214,37 @@ async function Home() {
       </div>
       <button class="btn-sub" data-new-default style="margin-top:8px">내 기본값으로 채우기</button>
     </div>`, { home: true, cta: '<button class="btn btn-primary" data-new>새 에딧 맡기기</button>' });
-  on("[data-new]", "click", () => { setDraft(emptyDraft(false)); go("#/new"); });
-  on("[data-new-default]", "click", () => { setDraft(emptyDraft(true)); go("#/new"); });
+
+  const startNew = (useDefaults) => {
+    if (p.draft && confirm("임시저장한 요청서가 있어요. 이어서 쓸까요?\n취소를 누르면 새로 작성해요.")) setDraft({ ...emptyDraft(true), ...p.draft });
+    else setDraft(emptyDraft(useDefaults));
+    go("#/new");
+  };
+  on("[data-new]", "click", () => startNew(false));
+  on("[data-new-default]", "click", () => startNew(true));
+  on("[data-draft-continue]", "click", () => { setDraft({ ...emptyDraft(true), ...p.draft }); go("#/new"); });
+  on("[data-draft-delete]", "click", async () => {
+    if (!confirm("임시저장한 요청서를 지울까요?")) return;
+    state.profile = await api.clearDraftRemote(state.user);
+    toast("임시저장을 지웠어요");
+    Home();
+  });
+}
+
+// 임시저장 + 다음 버튼
+const SAVE_NEXT = '<div style="display:grid;grid-template-columns:110px 1fr;gap:10px"><button class="btn btn-outline" data-temp-save>임시저장</button><button class="btn btn-primary" data-next>다음으로</button></div>';
+function bindTempSave(d) {
+  on("[data-temp-save]", "click", async (e) => {
+    const b = e.currentTarget;
+    b.disabled = true;
+    try {
+      const { agreed, ...rest } = d;
+      state.profile = await api.saveDraftRemote(state.user, rest);
+      toast("임시저장했어요 · 홈에서 이어서 쓸 수 있어요");
+    } catch (err) {
+      toast("임시저장하지 못했어요: " + err.message);
+    } finally { b.disabled = false; }
+  });
 }
 
 // ---------------------------------------------------------
@@ -209,8 +254,6 @@ async function NewForm() {
   const d = getDraft() || emptyDraft(true);
   setDraft(d);
   const p = state.profile || {};
-  const mine = await api.listMyRequests(state.user);
-  const last = mine[0];
 
   const srcRows = d.sources.map((s, i) => `
     <div class="src-row">
@@ -229,7 +272,6 @@ async function NewForm() {
       <div class="muted bold">내 카드</div>
       <div style="margin:6px 0 12px">${esc(p.default_bias || "[그룹] [멤버]")} · ${esc(p.default_ratio || "4:3")} · ${esc(p.default_credit || "edit by @[계정]")}</div>
       <button class="btn-sub" data-fill-default>내 기본값으로 채우기</button>
-      ${last ? `<button class="btn-sub" data-fill-last style="margin-top:8px">지난 요청 불러와서 채우기</button>` : ""}
     </div>
 
     <div class="section-title">일정</div>
@@ -264,7 +306,7 @@ async function NewForm() {
 
     <div class="section-title">크레딧 표기</div>
     <input class="input" placeholder="예: edit by @내계정" value="${esc(d.credit)}" data-f="credit" />
-  `, { title: "에딧 요청서", back: "#/", cta: '<button class="btn btn-primary" data-next>다음으로</button>' });
+  `, { title: "에딧 요청서", back: "#/", cta: SAVE_NEXT });
 
   const save = () => setDraft(d);
   on("[data-f]", "input", (e) => { d[e.target.dataset.f] = e.target.value; save(); });
@@ -281,14 +323,7 @@ async function NewForm() {
     d.member = p.default_bias || d.member; d.credit = p.default_credit || d.credit; d.ratio = p.default_ratio || d.ratio;
     toast("내 기본값으로 채웠어요"); rerender();
   });
-  on("[data-fill-last]", "click", () => {
-    Object.assign(d, {
-      member: last.member || "", song: last.song || "", occasion: last.occasion || "",
-      sources: last.sources?.length ? last.sources.map((s) => ({ ...s })) : [{ time: "", url: "" }],
-      refs: last.refs?.length ? [...last.refs] : [""], notes: last.notes || "", credit: last.credit || "", ratio: last.ratio || d.ratio,
-    });
-    toast("지난 요청 내용으로 채웠어요 (날짜는 새로 골라 주세요)"); rerender();
-  });
+  bindTempSave(d);
   on("[data-next]", "click", () => {
     $app.querySelectorAll("[data-err]").forEach((el) => (el.textContent = ""));
     let first = null;
@@ -342,8 +377,9 @@ function Price() {
       <div class="row"><span class="title-m">총 금액</span><span class="big accent">${won(c.total)}</span></div>
       <div class="muted small" style="margin-top:2px">${esc(summary)}</div>
       <div class="err" data-err="type"></div>
-    </div>`, { title: "가격", back: "#/new", cta: '<button class="btn btn-primary" data-next>이 구성으로 결제하기</button>' });
+    </div>`, { title: "가격", back: "#/new", cta: SAVE_NEXT.replace("다음으로", "이 구성으로 결제하기") });
 
+  bindTempSave(d);
   const keep = (fn) => () => { const y = scrollY; fn(); setDraft(d); Price(); scrollTo(0, y); };
   on("[data-type]", "click", (e) => keep(() => { d.edit_type = e.currentTarget.dataset.type; })());
   on("[data-opt]", "click", (e) => keep(() => { const k = e.currentTarget.dataset.opt; d[k] = !d[k]; })());
@@ -433,6 +469,7 @@ function Pay() {
       };
       const r = await api.createRequest(state.user, clean);
       clearDraft();
+      if (state.profile?.draft) state.profile = await api.clearDraftRemote(state.user).catch(() => state.profile);
       go(`#/done/${r.id}`);
     } catch (err) {
       toast("보내지 못했어요: " + err.message);
@@ -533,10 +570,11 @@ async function Progress(id) {
       <div class="pill-date"><span class="small">납품 예정</span><span class="bold">${fmtDate(r.upload_date)}</span></div>
     </div>
     ${banner}
+    <a class="btn btn-outline" href="#/chat/${esc(r.id)}" style="margin-top:12px;height:48px;font-size:15px;text-decoration:none">${ICON.chat} 에디터에게 메시지 보내기</a>
     <div class="section-title">현재 진행 상황</div>
     <div class="card">${stepsHtml(r)}</div>
     ${preview}
-  `, { title: "진행 중인 의뢰", back: "#/", cta: '<button class="btn btn-primary" data-home>홈으로 돌아가기</button>' });
+  `, { title: "진행 중인 의뢰", back: "#/", bell: true, cta: '<button class="btn btn-primary" data-home>홈으로 돌아가기</button>' });
 
   bindCopy();
   on("[data-home]", "click", () => go("#/"));
@@ -555,12 +593,11 @@ async function Progress(id) {
 // 마이페이지
 // ---------------------------------------------------------
 async function MyPage() {
-  const [reqs, annis] = await Promise.all([api.listMyRequests(state.user), api.listAnniversaries(state.user)]);
+  const reqs = await api.listMyRequests(state.user);
   const p = state.profile || {};
   const active = reqs.filter((r) => r.status !== "cancelled" && r.stage < 5);
   const ratio = p.default_ratio || "4:3";
   const initial = (p.nickname || "?").slice(0, 1);
-  const annSorted = annis.map((a) => ({ ...a, next: nextOccurrence(a.date) })).sort((a, b) => a.next - b.next);
 
   layout(`
     <div class="row" style="justify-content:flex-start;gap:14px;margin-top:6px">
@@ -575,26 +612,6 @@ async function MyPage() {
         <div class="bar"><i style="width:${Math.round((Math.max(0, r.stage) / 5) * 100)}%"></i></div>
         <div class="muted small">${r.status === "awaiting_payment" ? "입금 확인 중" : `5단계 중 ${r.stage}단계 · ${STAGES[Math.max(0, r.stage - 1)]}`} · 진행판 보기</div>
       </a>`).join("") : '<div class="card empty">진행 중인 의뢰가 없어요</div>'}
-
-    <div class="section-title">다가오는 기념일</div>
-    <div class="card" style="padding-top:4px;padding-bottom:4px">
-      <div class="rows">
-        ${annSorted.length ? annSorted.map((a) => {
-          const n = Math.round((a.next - today()) / 86400000);
-          return `<div class="row"><div style="min-width:0"><b class="ellipsis" style="display:block">${esc(a.title)}</b>
-            <div class="muted small">${fmtDate(a.date)} · ${n === 0 ? "D-day" : "D-" + n} ${a.notify ? "· 홈에 D-30 알림 켜짐" : ""}</div></div>
-            <div class="row" style="gap:6px;flex:none"><button class="toggle" role="switch" aria-checked="${!!a.notify}" aria-label="${esc(a.title)} 알림" data-ann-toggle="${esc(a.id)}"></button>
-            <button class="x-btn" style="height:31px" data-ann-del="${esc(a.id)}" aria-label="삭제">×</button></div></div>`;
-        }).join("") : '<div class="empty">등록한 기념일이 없어요</div>'}
-      </div>
-    </div>
-    <div class="card" style="margin-top:12px;border:1.5px dashed #f2b9ee;box-shadow:none" data-ann-form>
-      <input class="input" placeholder="예: [멤버] 생일" data-ann-title />
-      <div class="grid-2" style="margin-top:10px;grid-template-columns:minmax(0,1fr) auto">
-        <input class="input" type="date" data-ann-date aria-label="기념일 날짜" />
-        <button class="btn-mini" style="height:50px;padding:0 20px" data-ann-add>+ 추가</button>
-      </div>
-    </div>
 
     <div class="section-title">내 기본값</div>
     <div class="card">
@@ -622,7 +639,7 @@ async function MyPage() {
       ${api.DEMO ? '<button class="menu-item" data-reset><span>체험 데이터 지우기</span></button>' : ""}
       <button class="menu-item" data-logout><span>로그아웃</span></button>
     </div>
-  `, { title: "마이페이지", back: "#/" });
+  `, { title: "마이페이지", back: "#/", bell: true });
 
   let defRatio = ratio;
   on("[data-def-ratio]", "click", (e) => {
@@ -635,27 +652,94 @@ async function MyPage() {
     state.profile = await api.updateProfile(state.user, patch);
     toast("저장됨 · 다음 요청서에 채워져요");
   });
-  on("[data-ann-toggle]", "click", async (e) => {
-    const id = e.currentTarget.dataset.annToggle;
-    const a = annis.find((x) => x.id === id);
-    await api.updateAnniversary(id, { notify: !a.notify });
-    MyPage();
-  });
-  on("[data-ann-del]", "click", async (e) => {
-    if (!confirm("이 기념일을 지울까요?")) return;
-    await api.deleteAnniversary(e.currentTarget.dataset.annDel);
-    MyPage();
-  });
-  on("[data-ann-add]", "click", async () => {
-    const title = $app.querySelector("[data-ann-title]").value.trim();
-    const date = $app.querySelector("[data-ann-date]").value;
-    if (!title || !date) { toast("기념일 이름과 날짜를 모두 적어 주세요"); return; }
-    await api.addAnniversary(state.user, { title, date });
-    toast("기념일을 추가했어요");
-    MyPage();
-  });
   on("[data-logout]", "click", async () => { await api.logout(); state.user = null; clearDraft(); go("#/login"); });
   on("[data-reset]", "click", () => { if (confirm("체험 데이터를 모두 지울까요?")) { api.resetDemo(); clearDraft(); state.user = null; go("#/login"); } });
+}
+
+// ---------------------------------------------------------
+// 알림함
+// ---------------------------------------------------------
+const NOTI_ICON = { message: "💬", stage: "🎬", confirmed: "✅", preview: "👀", cancelled: "⚠️", new_request: "📩", revision: "✏️", approved: "💗" };
+async function Notifications() {
+  const list = await api.listNotifications(state.user);
+  layout(`
+    ${list.length ? `<div class="card" style="padding-top:4px;padding-bottom:4px"><div class="rows">${list.map((n) => `
+      <a class="row noti ${n.read_at ? "" : "unread"}" href="${esc(n.link && n.link.startsWith("#/") ? n.link : "#/")}" style="text-decoration:none;align-items:flex-start;justify-content:flex-start">
+        <span class="noti-ic" aria-hidden="true">${NOTI_ICON[n.kind] || "🔔"}</span>
+        <span style="min-width:0;flex:1"><b style="display:block">${esc(n.title)}</b>
+          ${n.body ? `<span class="muted small" style="display:block;word-break:break-all">${esc(n.body)}</span>` : ""}
+          <span class="muted small">${fmtDateTime(n.created_at)}</span></span>
+      </a>`).join("")}</div></div>` : '<div class="card empty" style="padding:40px 0">아직 알림이 없어요<br/>진행 상황이 바뀌거나 메시지가 오면 여기에 쌓여요</div>'}
+  `, { title: "알림", back: "#/" });
+  await api.markAllRead(state.user);
+}
+
+// ---------------------------------------------------------
+// 메시지
+// ---------------------------------------------------------
+function bubbles(msgs, myId) {
+  if (!msgs.length) return '<div class="empty">아직 메시지가 없어요. 궁금한 점이나 요청을 편하게 남겨 주세요.</div>';
+  let lastDay = "";
+  return msgs.map((m) => {
+    const d = new Date(m.created_at);
+    const day = `${d.getMonth() + 1}월 ${d.getDate()}일`;
+    const sep = day !== lastDay ? `<div class="chat-day">${day}</div>` : "";
+    lastDay = day;
+    const mine = m.sender_id === myId;
+    const time = `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
+    return `${sep}<div class="bubble-row ${mine ? "mine" : ""}"><div class="bubble">${esc(m.body)}</div><span class="muted small">${time}</span></div>`;
+  }).join("");
+}
+let chatUnsub = null;
+function mountChat(requestId, { mineIsEditor = false } = {}) {
+  const listEl = $app.querySelector("[data-chat-list]");
+  const text = $app.querySelector("[data-chat-text]");
+  const sendBtn = $app.querySelector("[data-chat-send]");
+  if (!listEl) return;
+  let msgs = [];
+  const paint = (scroll = true) => {
+    listEl.innerHTML = bubbles(msgs, state.user.id);
+    if (scroll) { listEl.scrollTop = listEl.scrollHeight; if (!mineIsEditor) window.scrollTo(0, document.body.scrollHeight); }
+  };
+  const loadMsgs = async () => { msgs = await api.listMessages(requestId); paint(); };
+  loadMsgs();
+  if (chatUnsub) chatUnsub();
+  chatUnsub = api.subscribe(state.user, {
+    onMessage: (m) => {
+      if (m.request_id !== requestId || msgs.some((x) => x.id === m.id)) return;
+      if (!document.body.contains(listEl)) return;
+      msgs.push(m); paint();
+    },
+  });
+  const send = async () => {
+    const body = text.value.trim();
+    if (!body) return;
+    sendBtn.disabled = true;
+    try {
+      const m = await api.sendMessage(state.user, requestId, body);
+      if (!msgs.some((x) => x.id === m.id)) msgs.push(m);
+      text.value = ""; paint();
+    } catch (e) { toast("보내지 못했어요: " + e.message); }
+    finally { sendBtn.disabled = false; text.focus(); }
+  };
+  sendBtn.addEventListener("click", send);
+  text.addEventListener("keydown", (e) => { if (e.key === "Enter" && !e.shiftKey && !e.isComposing) { e.preventDefault(); send(); } });
+}
+
+async function Chat(id) {
+  const r = await api.getRequest(id);
+  if (!r) { layout('<div class="empty">요청서를 찾을 수 없어요</div>', { title: "메시지", back: "#/" }); return; }
+  layout(`
+    <a class="card" href="#/request/${esc(r.id)}" style="display:block;text-decoration:none;padding:14px 18px">
+      <div class="row"><b class="ellipsis">${esc(titleOf(r))}</b>${statusBadge(r)}</div>
+      <div class="muted small">진행판 보기</div>
+    </a>
+    <div class="chat-list page-chat" data-chat-list><div class="empty">불러오는 중…</div></div>
+  `, {
+    title: "에디터와 메시지", back: `#/request/${id}`, bell: true,
+    cta: `<div class="chat-input"><textarea class="textarea" rows="1" placeholder="메시지를 입력하세요" data-chat-text maxlength="2000"></textarea><button class="btn-mini dark" data-chat-send>보내기</button></div>`,
+  });
+  mountChat(id);
 }
 
 // ---------------------------------------------------------
@@ -684,7 +768,7 @@ async function EditorList() {
           <div class="muted small" style="margin-top:4px">${esc(r.profiles?.nickname || "의뢰인")} · 접수 ${fmtDateTime(r.created_at)} · 입금자 ${esc(r.depositor || "-")}</div>
           <div class="row" style="margin-top:8px"><span>마감 ${fmtDate(r.deadline)} <b class="accent">${ddayText(r.deadline)}</b></span><b>${won(r.total)}</b></div>
         </a>`).join("") : '<div class="card empty">해당하는 요청서가 없어요</div>'}
-    </div>`, { title: "에디터 페이지", back: "#/me", wide: true });
+    </div>`, { title: "에디터 페이지", back: "#/me", wide: true, bell: true });
   on("[data-filter]", "click", (e) => { sessionStorage.setItem("ec-filter", e.currentTarget.dataset.filter); EditorList(); });
 }
 
@@ -758,9 +842,19 @@ async function EditorDetail(id) {
       ${r.stage > 0 && r.client_approved_stage >= r.stage && !r.client_note ? '<div class="notice" style="margin-top:10px">의뢰인이 현재 단계를 "이대로 좋아요"로 확인했어요</div>' : ""}
     </div>
 
+    <div class="section-title">의뢰인과 메시지</div>
+    <div class="card">
+      <div class="chat-list" data-chat-list><div class="empty">불러오는 중…</div></div>
+      <div class="chat-input">
+        <textarea class="textarea" rows="1" placeholder="의뢰인에게 보낼 메시지" data-chat-text maxlength="2000"></textarea>
+        <button class="btn-mini dark" data-chat-send>보내기</button>
+      </div>
+    </div>
+
     <div class="section-title">메모 (나만 보기)</div>
     <textarea class="textarea" placeholder="작업 메모" data-memo>${esc(r.editor_memo || "")}</textarea>
-  `, { title: "요청서", back: "#/editor", wide: true, cta: '<button class="btn btn-primary" data-save>저장하기</button>' });
+  `, { title: "요청서", back: "#/editor", wide: true, bell: true, cta: '<button class="btn btn-primary" data-save>저장하기</button>' });
+  mountChat(id, { mineIsEditor: true });
 
   const upd = async (patch, msg) => {
     try { await api.editorUpdate(id, patch); toast(msg); EditorDetail(id); }
@@ -810,6 +904,8 @@ const ROUTES = [
   [/^#\/done\/([\w-]+)$/, Done],
   [/^#\/request\/([\w-]+)$/, Progress],
   [/^#\/me$/, MyPage],
+  [/^#\/notifications$/, Notifications],
+  [/^#\/chat\/([\w-]+)$/, Chat],
   [/^#\/editor$/, EditorList, true, true],
   [/^#\/editor\/([\w-]+)$/, EditorDetail, true, true],
 ];
@@ -830,6 +926,18 @@ async function render() {
   }
 }
 
+let liveUnsub = null;
+function startLive() {
+  if (liveUnsub) liveUnsub();
+  liveUnsub = api.subscribe(state.user, {
+    onNotification: (n) => {
+      toast("🔔 " + n.title);
+      refreshBadge();
+      if (location.hash === "#/notifications") Notifications();
+    },
+  });
+}
+
 async function loadSession() {
   state.user = await api.getUser();
   if (state.user) {
@@ -844,9 +952,11 @@ async function loadSession() {
     await api.init();
     await loadSession();
     if (location.search.includes("code=")) history.replaceState(null, "", location.pathname + location.hash);
+    startLive();
     api.onAuthChange(async (user) => {
       if ((user?.id || null) === (state.user?.id || null)) return;
       await loadSession();
+      startLive();
       render();
     });
   } catch (err) {
