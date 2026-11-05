@@ -1,4 +1,4 @@
-import * as api from "./api.js?v=5";
+import * as api from "./api.js?v=6";
 
 const CFG = window.APP_CONFIG;
 const P = CFG.PRICES;
@@ -101,7 +101,7 @@ function layout(body, { title, back, cta = "", wide = false, home = false, bell 
   $app.className = "app" + (wide ? " wide" : "");
   const bar = api.DEMO ? '<div class="demo-bar">체험 모드 · 이 기기에만 저장돼요 (config.js 에 Supabase 키를 넣으면 실제 서비스로 바뀌어요)</div>' : "";
   const head = home
-    ? `<header class="top"><span class="logo"><img src="logo.png?v=5" alt="에딧 커미션" style="height:34px;width:auto;display:block" /></span><a class="icon-btn bell" href="#/messages" aria-label="메시지">${ICON.chat.replace(/18/g, "22")}<span class="noti-badge" data-msg-badge hidden></span></a><a class="icon-btn bell" href="#/notifications" aria-label="알림">${ICON.bell}<span class="noti-badge" data-badge hidden></span></a><a class="icon-btn" href="#/me" aria-label="마이페이지">${ICON.user}</a></header>`
+    ? `<header class="top"><span class="logo"><img src="logo.png?v=6" alt="에딧 커미션" style="height:34px;width:auto;display:block" /></span><a class="icon-btn bell" href="#/messages" aria-label="메시지">${ICON.chat.replace(/18/g, "22")}<span class="noti-badge" data-msg-badge hidden></span></a><a class="icon-btn bell" href="#/notifications" aria-label="알림">${ICON.bell}<span class="noti-badge" data-badge hidden></span></a><a class="icon-btn" href="#/me" aria-label="마이페이지">${ICON.user}</a></header>`
     : `<header class="top">${back !== false ? `<button class="back" data-back aria-label="뒤로">${ICON.back}</button>` : ""}<h1>${esc(title || "")}</h1>${bell ? `<a class="icon-btn bell" href="#/notifications" aria-label="알림">${ICON.bell}<span class="noti-badge" data-badge hidden></span></a>` : ""}</header>`;
   $app.innerHTML = `${bar}${head}<main class="page">${body}</main>${cta ? `<div class="cta">${cta}</div>` : ""}`;
   $app.querySelector("[data-back]")?.addEventListener("click", () => {
@@ -149,7 +149,7 @@ function Login() {
   $app.innerHTML = `
     ${api.DEMO ? '<div class="demo-bar">체험 모드 · 버튼을 누르면 체험 계정으로 들어가요</div>' : ""}
     <div class="login">
-      <img src="logo.png?v=5" alt="에딧 커미션" style="height:64px;width:auto;align-self:flex-start" />
+      <img src="logo.png?v=6" alt="에딧 커미션" style="height:64px;width:auto;align-self:flex-start" />
       <h1>에딧 커미션,<br/>이제 걱정 없이 맡기세요</h1>
       <p class="muted" style="margin:0;color:#333">맡기는 순간부터 기념일 당일까지<br/>걱정 없이 맡기는 에딧 커미션</p>
       <div style="flex:1"></div>
@@ -626,11 +626,29 @@ async function MyPage() {
   const active = reqs.filter((r) => r.status !== "cancelled" && r.stage < 5);
   const ratio = p.default_ratio || "4:3";
   const initial = (p.nickname || "?").slice(0, 1);
+  const avatarSrc = p.avatar_url && (p.avatar_url.startsWith("data:image/") ? p.avatar_url : safeUrl(p.avatar_url));
 
   layout(`
     <div class="row" style="justify-content:flex-start;gap:14px;margin-top:6px">
-      <div class="avatar" ${safeUrl(p.avatar_url) ? `style="background-image:url('${esc(safeUrl(p.avatar_url))}')"` : ""}>${safeUrl(p.avatar_url) ? "" : esc(initial)}</div>
-      <div><div class="title-m">${esc(p.nickname || "의뢰인")}</div><div class="small">카카오 로그인 · 의뢰 ${reqs.length}건</div></div>
+      <label class="avatar-edit" title="사진 바꾸기">
+        <span class="avatar" data-avatar ${avatarSrc ? `style="background-image:url('${esc(avatarSrc)}')"` : ""}>${avatarSrc ? "" : esc(initial)}</span>
+        <span class="avatar-cam" aria-hidden="true">📷</span>
+        <input type="file" accept="image/*" data-avatar-file class="sr-only" aria-label="프로필 사진 바꾸기" />
+      </label>
+      <div style="min-width:0;flex:1">
+        <div class="title-m ellipsis" data-nick-view>${esc(p.nickname || "의뢰인")}</div>
+        <div class="small">카카오 로그인 · 의뢰 ${reqs.length}건</div>
+      </div>
+      <button class="btn-mini" data-nick-edit>프로필 수정</button>
+    </div>
+    <div class="card" data-nick-box hidden style="margin-top:14px">
+      <div class="bold">닉네임</div>
+      <input class="input field" maxlength="20" placeholder="에디터에게 보일 이름" value="${esc(p.nickname || "")}" data-nick />
+      <div class="grid-2" style="margin-top:12px">
+        <button class="btn-sub" style="background:#f3f3f3" data-avatar-reset>기본 사진으로</button>
+        <button class="btn-sub" data-nick-save>저장하기</button>
+      </div>
+      <p class="muted small" style="margin:8px 0 0;text-align:center">사진은 동그라미를 눌러 바꿀 수 있어요</p>
     </div>
 
     <div class="section-title">진행 중인 의뢰</div>
@@ -669,6 +687,36 @@ async function MyPage() {
     </div>
   `, { title: "마이페이지", back: "#/", bell: true });
 
+  on("[data-nick-edit]", "click", () => { const b = $app.querySelector("[data-nick-box]"); b.hidden = !b.hidden; if (!b.hidden) b.querySelector("input").focus(); });
+  on("[data-nick-save]", "click", async (e) => {
+    const nickname = $app.querySelector("[data-nick]").value.trim();
+    if (!nickname) { toast("닉네임을 적어 주세요"); return; }
+    e.currentTarget.disabled = true;
+    try {
+      state.profile = await api.updateProfile(state.user, { nickname });
+      toast("닉네임을 바꿨어요");
+      MyPage();
+    } catch (err) { toast("저장하지 못했어요: " + err.message); e.currentTarget.disabled = false; }
+  });
+  on("[data-avatar-file]", "change", async (e) => {
+    const f = e.target.files[0];
+    if (!f) return;
+    if (!f.type.startsWith("image/")) { toast("사진 파일만 올릴 수 있어요"); return; }
+    if (f.size > 15 * 1024 * 1024) { toast("15MB 이하 사진으로 골라 주세요"); return; }
+    toast("사진 올리는 중…");
+    try {
+      const url = await api.uploadAvatar(state.user, f);
+      state.profile = await api.updateProfile(state.user, { avatar_url: url });
+      toast("프로필 사진을 바꿨어요");
+      MyPage();
+    } catch (err) { toast("사진을 올리지 못했어요: " + err.message); }
+  });
+  on("[data-avatar-reset]", "click", async () => {
+    if (!confirm("기본 사진(이름 첫 글자)으로 바꿀까요?")) return;
+    state.profile = await api.updateProfile(state.user, { avatar_url: null });
+    toast("기본 사진으로 바꿨어요");
+    MyPage();
+  });
   let defRatio = ratio;
   on("[data-def-ratio]", "click", (e) => {
     defRatio = e.currentTarget.dataset.defRatio;

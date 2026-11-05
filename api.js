@@ -127,6 +127,35 @@ export async function getProfile(user) {
   }).select().single());
 }
 
+// 프로필 사진 올리기: 정사각형 400px JPEG 로 줄여서 저장
+export async function uploadAvatar(user, file) {
+  const blob = await shrinkImage(file, 400);
+  if (DEMO) {
+    return await new Promise((res) => { const r = new FileReader(); r.onload = () => res(r.result); r.readAsDataURL(blob); });
+  }
+  const path = `${user.id}/avatar-${Date.now()}.jpg`;
+  const { error } = await sb.storage.from("avatars").upload(path, blob, { contentType: "image/jpeg", upsert: true });
+  if (error) throw new Error(error.message);
+  return sb.storage.from("avatars").getPublicUrl(path).data.publicUrl;
+}
+
+function shrinkImage(file, size) {
+  return new Promise((resolve, reject) => {
+    const url = URL.createObjectURL(file);
+    const img = new Image();
+    img.onload = () => {
+      const s = Math.min(img.width, img.height);
+      const c = document.createElement("canvas");
+      c.width = c.height = size;
+      c.getContext("2d").drawImage(img, (img.width - s) / 2, (img.height - s) / 2, s, s, 0, 0, size, size);
+      URL.revokeObjectURL(url);
+      c.toBlob((b) => (b ? resolve(b) : reject(new Error("사진을 처리하지 못했어요"))), "image/jpeg", 0.85);
+    };
+    img.onerror = () => { URL.revokeObjectURL(url); reject(new Error("사진 파일을 열 수 없어요")); };
+    img.src = url;
+  });
+}
+
 export async function updateProfile(user, patch) {
   if (DEMO) {
     const s = load();
