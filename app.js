@@ -1,4 +1,4 @@
-import * as api from "./api.js?v=8";
+import * as api from "./api.js?v=9";
 
 const CFG = window.APP_CONFIG;
 const P = CFG.PRICES;
@@ -101,7 +101,7 @@ function layout(body, { title, back, cta = "", wide = false, home = false, bell 
   $app.className = "app" + (wide ? " wide" : "");
   const bar = api.DEMO ? '<div class="demo-bar">체험 모드 · 이 기기에만 저장돼요 (config.js 에 Supabase 키를 넣으면 실제 서비스로 바뀌어요)</div>' : "";
   const head = home
-    ? `<header class="top"><span class="logo"><img src="logo.png?v=8" alt="에딧 커미션" style="height:34px;width:auto;display:block" /></span><a class="icon-btn bell" href="#/messages" aria-label="메시지">${ICON.chat.replace(/18/g, "22")}<span class="noti-badge" data-msg-badge hidden></span></a><a class="icon-btn bell" href="#/notifications" aria-label="알림">${ICON.bell}<span class="noti-badge" data-badge hidden></span></a><a class="icon-btn" href="#/me" aria-label="마이페이지">${ICON.user}</a></header>`
+    ? `<header class="top"><span class="logo"><img src="logo.png?v=9" alt="에딧 커미션" style="height:34px;width:auto;display:block" /></span><a class="icon-btn bell" href="#/messages" aria-label="메시지">${ICON.chat.replace(/18/g, "22")}<span class="noti-badge" data-msg-badge hidden></span></a><a class="icon-btn bell" href="#/notifications" aria-label="알림">${ICON.bell}<span class="noti-badge" data-badge hidden></span></a><a class="icon-btn" href="#/me" aria-label="마이페이지">${ICON.user}</a></header>`
     : `<header class="top">${back !== false ? `<button class="back" data-back aria-label="뒤로">${ICON.back}</button>` : ""}<h1>${esc(title || "")}</h1>${bell ? `<a class="icon-btn bell" href="#/notifications" aria-label="알림">${ICON.bell}<span class="noti-badge" data-badge hidden></span></a>` : ""}</header>`;
   $app.innerHTML = `${bar}${head}<main class="page">${body}</main>${cta ? `<div class="cta">${cta}</div>` : ""}`;
   $app.querySelector("[data-back]")?.addEventListener("click", () => {
@@ -152,7 +152,7 @@ function Login() {
   $app.innerHTML = `
     ${api.DEMO ? '<div class="demo-bar">체험 모드 · 버튼을 누르면 체험 계정으로 들어가요</div>' : ""}
     <div class="login">
-      <img src="logo.png?v=8" alt="에딧 커미션" style="height:64px;width:auto;align-self:flex-start" />
+      <img src="logo.png?v=9" alt="에딧 커미션" style="height:64px;width:auto;align-self:flex-start" />
       <h1>에딧 커미션,<br/>이제 걱정 없이 맡기세요</h1>
       <p class="muted" style="margin:0;color:#333">맡기는 순간부터 기념일 당일까지<br/>걱정 없이 맡기는 에딧 커미션</p>
       <div style="flex:1"></div>
@@ -543,6 +543,18 @@ function stepsHtml(r) {
   }).join("")}</ol>`;
 }
 
+function revisionHistory(r, { editor = false } = {}) {
+  const list = (r.revision_history || []).slice().reverse();
+  if (!list.length) return editor ? '<div class="muted small" style="margin-top:10px">아직 받은 수정 요청이 없어요</div>' : "";
+  return `<div class="rev-list">${list.map((h) => `
+    <div class="rev-item ${h.resolved_at ? "done" : ""}">
+      <div class="row"><b>${h.n ? h.n + "번째 수정 요청" : "수정 요청"}</b>
+        ${h.resolved_at ? `<span class="badge green">반영 완료</span>` : `<span class="badge">${editor ? "확인 필요" : "반영 중"}</span>`}</div>
+      <div style="white-space:pre-wrap;word-break:break-word;margin-top:4px">${esc(h.note || "")}</div>
+      <div class="muted small" style="margin-top:4px">${fmtDateTime(h.at)} 요청${h.resolved_at ? ` · ${fmtDateTime(h.resolved_at)} 반영` : ""}</div>
+    </div>`).join("")}</div>`;
+}
+
 function deliveryCard(r) {
   const url = safeUrl(r.delivery_url);
   if (!url) return "";
@@ -586,7 +598,7 @@ async function Progress(id) {
       ${isVideo ? `<video src="${esc(url)}" controls playsinline style="width:100%;border-radius:14px;margin-top:12px;background:#111"></video>` : ""}
       <a class="btn btn-outline" href="${esc(url)}" target="_blank" rel="noopener noreferrer" style="margin-top:12px;height:46px;font-size:14px;text-decoration:none">미리보기 열기</a>
       <p class="muted small" style="margin:12px 0 0">수정은 ${free}회까지 무료예요 · 지금까지 ${r.revision_count || 0}회 요청</p>
-      ${pendingRevision ? `<div class="notice" style="margin-top:10px">보낸 수정 요청: ${esc(r.client_note)}</div>` : ""}
+      ${(r.revision_history || []).length ? `<div class="bold" style="margin-top:14px">내 수정 요청 기록</div>${revisionHistory(r)}` : pendingRevision ? `<div class="notice" style="margin-top:10px">보낸 수정 요청: ${esc(r.client_note)}</div>` : ""}
       ${approved ? '<div class="notice" style="margin-top:10px">이 단계는 "이대로 좋아요"로 확인했어요</div>' : ""}
       ${r.status === "confirmed" ? `
       <div class="grid-2" style="margin-top:12px">
@@ -1189,8 +1201,9 @@ async function EditorDetail(id) {
     <div class="section-title">의뢰인 피드백</div>
     <div class="card">
       <div>수정 요청 ${r.revision_count || 0}회 (무료 ${CFG.FREE_REVISIONS}회)</div>
-      ${r.client_note ? `<div class="notice" style="margin-top:10px"><b>수정 요청</b> · ${fmtDateTime(r.revision_requested_at)}<br/>${esc(r.client_note)}</div>
-        <button class="btn-mini" style="margin-top:10px" data-clear-note>반영했어요 (요청 닫기)</button>` : ""}
+      ${(r.revision_history || []).length ? revisionHistory(r, { editor: true })
+        : r.client_note ? `<div class="notice" style="margin-top:10px"><b>수정 요청</b> · ${fmtDateTime(r.revision_requested_at)}<br/>${esc(r.client_note)}</div>` : revisionHistory(r, { editor: true })}
+      ${r.client_note ? '<button class="btn-mini dark" style="margin-top:10px" data-clear-note>최근 요청 반영했어요</button>' : ""}
       ${r.stage > 0 && r.client_approved_stage >= r.stage && !r.client_note ? '<div class="notice" style="margin-top:10px">의뢰인이 현재 단계를 "이대로 좋아요"로 확인했어요</div>' : ""}
     </div>
 
@@ -1238,7 +1251,13 @@ async function EditorDetail(id) {
     upd({ delivery_url: url, delivery_note: note || null, delivered_at: new Date().toISOString(), received_at: url === r.delivery_url ? r.received_at : null,
       stage: 5, stage_dates: sd, status: "confirmed" }, "납품했어요 · 의뢰인에게 알림이 갔어요");
   });
-  on("[data-clear-note]", "click", () => upd({ client_note: null, revision_requested_at: null }, "수정 요청을 닫았어요"));
+  on("[data-clear-note]", "click", () => {
+    const now = new Date().toISOString();
+    const hist = (r.revision_history || []).map((h) => ({ ...h }));
+    hist.forEach((h) => { if (!h.resolved_at) h.resolved_at = now; });
+    if (!hist.length && r.client_note) hist.push({ n: r.revision_count, note: r.client_note, at: r.revision_requested_at || now, resolved_at: now });
+    upd({ client_note: null, revision_requested_at: null, revision_history: hist }, "반영 완료로 표시했어요 · 기록은 그대로 남아요");
+  });
   on("[data-save]", "click", () => {
     const stage = Number($app.querySelector("[data-stage]").value);
     const t = isoDay(today());

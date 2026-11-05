@@ -245,6 +245,7 @@ export async function requestRevision(id, note) {
     r.revision_count = (r.revision_count || 0) + 1;
     r.client_note = note;
     r.revision_requested_at = new Date().toISOString();
+    r.revision_history = [...(r.revision_history || []), { n: r.revision_count, note, at: r.revision_requested_at, resolved_at: null }];
     demoNotify(s, r.user_id, { request_id: r.id, kind: "revision", title: "수정 요청이 왔어요",
       body: `${demoTitle(r)} · ${note.slice(0, 80)}`, link: `#/editor/${r.id}` });
     save(s);

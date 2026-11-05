@@ -293,3 +293,6 @@ input[type="date"] { min-width: 0; max-width: 100%; }
 .seg-btn { font-size: 14px; padding: 0 4px; white-space: nowrap; }
 .member-row { padding: 14px 18px; }
 .member-row .avatar { flex: none; }
+.rev-list { display: flex; flex-direction: column; gap: 8px; margin-top: 10px; }
+.rev-item { background: var(--sub); border-radius: 14px; padding: 12px 14px; font-size: 14px; }
+.rev-item.done { background: #f5f5f6; }
