@@ -1,4 +1,4 @@
-import * as api from "./api.js?v=9";
+import * as api from "./api.js?v=11";
 
 const CFG = window.APP_CONFIG;
 const P = CFG.PRICES;
@@ -101,7 +101,7 @@ function layout(body, { title, back, cta = "", wide = false, home = false, bell 
   $app.className = "app" + (wide ? " wide" : "");
   const bar = api.DEMO ? '<div class="demo-bar">체험 모드 · 이 기기에만 저장돼요 (config.js 에 Supabase 키를 넣으면 실제 서비스로 바뀌어요)</div>' : "";
   const head = home
-    ? `<header class="top"><span class="logo"><img src="logo.png?v=9" alt="에딧 커미션" style="height:34px;width:auto;display:block" /></span><a class="icon-btn bell" href="#/messages" aria-label="메시지">${ICON.chat.replace(/18/g, "22")}<span class="noti-badge" data-msg-badge hidden></span></a><a class="icon-btn bell" href="#/notifications" aria-label="알림">${ICON.bell}<span class="noti-badge" data-badge hidden></span></a><a class="icon-btn" href="#/me" aria-label="마이페이지">${ICON.user}</a></header>`
+    ? `<header class="top"><span class="logo"><img src="logo.png?v=11" alt="에딧 커미션" style="height:34px;width:auto;display:block" /></span><a class="icon-btn bell" href="#/messages" aria-label="메시지">${ICON.chat.replace(/18/g, "22")}<span class="noti-badge" data-msg-badge hidden></span></a><a class="icon-btn bell" href="#/notifications" aria-label="알림">${ICON.bell}<span class="noti-badge" data-badge hidden></span></a><a class="icon-btn" href="#/me" aria-label="마이페이지">${ICON.user}</a></header>`
     : `<header class="top">${back !== false ? `<button class="back" data-back aria-label="뒤로">${ICON.back}</button>` : ""}<h1>${esc(title || "")}</h1>${bell ? `<a class="icon-btn bell" href="#/notifications" aria-label="알림">${ICON.bell}<span class="noti-badge" data-badge hidden></span></a>` : ""}</header>`;
   $app.innerHTML = `${bar}${head}<main class="page">${body}</main>${cta ? `<div class="cta">${cta}</div>` : ""}`;
   $app.querySelector("[data-back]")?.addEventListener("click", () => {
@@ -152,7 +152,7 @@ function Login() {
   $app.innerHTML = `
     ${api.DEMO ? '<div class="demo-bar">체험 모드 · 버튼을 누르면 체험 계정으로 들어가요</div>' : ""}
     <div class="login">
-      <img src="logo.png?v=9" alt="에딧 커미션" style="height:64px;width:auto;align-self:flex-start" />
+      <img src="logo.png?v=11" alt="에딧 커미션" style="height:64px;width:auto;align-self:flex-start" />
       <h1>에딧 커미션,<br/>이제 걱정 없이 맡기세요</h1>
       <p class="muted" style="margin:0;color:#333">맡기는 순간부터 기념일 당일까지<br/>걱정 없이 맡기는 에딧 커미션</p>
       <div style="flex:1"></div>
@@ -185,8 +185,9 @@ async function Home() {
       <div style="margin-top:8px" class="ellipsis">${esc(titleOf(active))} · ${fmtDate(active.deadline)}</div>
       <div class="row" style="justify-content:flex-start;gap:10px;margin-top:4px">
         <span class="dday">${ddayText(active.deadline)}</span><span>마감일 0시까지</span>
-        <span style="flex:1"></span>${statusBadge(active)}
+        <span style="flex:1"></span>${boardBadge(active)}
       </div>
+      ${boardTrack(active)}
       <div class="pill-date"><span class="small">납품 예정</span><span class="bold">${fmtDate(active.upload_date)}</span></div>
     </a>` : `
     <div class="card"><div class="title-m">진행 중인 의뢰</div><p class="muted" style="margin:8px 0 0">아직 진행 중인 의뢰가 없어요. 아래 버튼으로 첫 에딧을 맡겨 보세요.</p></div>`;
@@ -271,6 +272,25 @@ function bindTempSave(d) {
       toast("임시저장하지 못했어요: " + err.message);
     } finally { b.disabled = false; }
   });
+}
+
+// 홈 화면용 진행판 (진행판과 같은 5단계)
+function boardBadge(r) {
+  const label = r.status === "pending_review" ? "승인 대기" : r.status === "awaiting_payment" ? "입금 확인 중"
+    : r.stage >= 5 ? "납품 완료" : r.client_note && r.revision_requested_at ? "수정 요청" : STAGES[Math.max(0, r.stage - 1)];
+  return `<span class="board-badge">${esc(label)}</span>`;
+}
+function boardTrack(r) {
+  const cur = r.status === "confirmed" ? r.stage : 0;   // 1~5, 시작 전이면 0
+  const finished = cur >= 5;
+  const pct = finished ? 100 : cur <= 1 ? 0 : ((cur - 1) / (STAGES.length - 1)) * 100;
+  return `<div class="board-track" style="--p:${pct}" role="img" aria-label="진행 상황: ${esc(cur ? STAGES[cur - 1] : "시작 전")}">
+    ${STAGES.map((name, i) => {
+      const k = i + 1;
+      const st = finished || k < cur ? "done" : k === cur ? "now" : "todo";
+      return `<div class="board-step ${st}"><span class="board-dot"></span><span class="board-label">${name}</span></div>`;
+    }).join("")}
+  </div>`;
 }
 
 // ---------------------------------------------------------
