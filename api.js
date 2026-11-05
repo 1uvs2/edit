@@ -6,7 +6,13 @@ let sb = null;
 
 export async function init() {
   if (DEMO) return;
-  const { createClient } = await import("https://esm.sh/@supabase/supabase-js@2");
+  let mod;
+  try {
+    mod = await import("https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm");
+  } catch {
+    mod = await import("https://esm.sh/@supabase/supabase-js@2");
+  }
+  const { createClient } = mod;
   sb = createClient(CFG.SUPABASE_URL, CFG.SUPABASE_ANON_KEY, {
     auth: { persistSession: true, detectSessionInUrl: true, flowType: "pkce" },
   });

@@ -214,7 +214,7 @@ async function NewForm() {
 
   const srcRows = d.sources.map((s, i) => `
     <div class="src-row">
-      <input class="input" placeholder="00:00" value="${esc(s.time)}" data-src-time="${i}" aria-label="소스 시간" />
+      <input class="input" placeholder="00:00~00:00" value="${esc(s.time)}" data-src-time="${i}" aria-label="소스 시간" />
       <input class="input" placeholder="링크를 업로드해 주세요" value="${esc(s.url)}" data-src-url="${i}" aria-label="소스 링크" inputmode="url" />
       <button class="x-btn" data-src-del="${i}" aria-label="삭제">×</button>
     </div>`).join("");

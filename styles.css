@@ -144,7 +144,7 @@ input[type="date"] { min-width: 0; max-width: 100%; }
   border: 1.5px solid #f2d6f0; background: #fff; font-weight: 600;
 }
 .chip.on { border-color: var(--accent); background: #fff3fe; }
-.src-row { display: grid; grid-template-columns: 92px 1fr 36px; gap: 8px; margin-top: 10px; }
+.src-row { display: grid; grid-template-columns: 132px minmax(0, 1fr) 36px; gap: 8px; margin-top: 10px; }
 .src-row .input { padding: 0 14px; }
 .ref-row { display: grid; grid-template-columns: 1fr 36px; gap: 8px; margin-top: 10px; }
 .x-btn { width: 36px; height: 50px; color: var(--text-sub); font-size: 20px; }
