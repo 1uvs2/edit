@@ -1,4 +1,4 @@
-import * as api from "./api.js?v=3";
+import * as api from "./api.js?v=4";
 
 const CFG = window.APP_CONFIG;
 const P = CFG.PRICES;
@@ -101,7 +101,7 @@ function layout(body, { title, back, cta = "", wide = false, home = false, bell 
   $app.className = "app" + (wide ? " wide" : "");
   const bar = api.DEMO ? '<div class="demo-bar">체험 모드 · 이 기기에만 저장돼요 (config.js 에 Supabase 키를 넣으면 실제 서비스로 바뀌어요)</div>' : "";
   const head = home
-    ? `<header class="top"><span class="logo"><img src="logo.png?v=3" alt="에딧 커미션" style="height:34px;width:auto;display:block" /></span><a class="icon-btn bell" href="#/notifications" aria-label="알림">${ICON.bell}<span class="noti-badge" data-badge hidden></span></a><a class="icon-btn" href="#/me" aria-label="마이페이지">${ICON.user}</a></header>`
+    ? `<header class="top"><span class="logo"><img src="logo.png?v=4" alt="에딧 커미션" style="height:34px;width:auto;display:block" /></span><a class="icon-btn bell" href="#/messages" aria-label="메시지">${ICON.chat.replace(/18/g, "22")}<span class="noti-badge" data-msg-badge hidden></span></a><a class="icon-btn bell" href="#/notifications" aria-label="알림">${ICON.bell}<span class="noti-badge" data-badge hidden></span></a><a class="icon-btn" href="#/me" aria-label="마이페이지">${ICON.user}</a></header>`
     : `<header class="top">${back !== false ? `<button class="back" data-back aria-label="뒤로">${ICON.back}</button>` : ""}<h1>${esc(title || "")}</h1>${bell ? `<a class="icon-btn bell" href="#/notifications" aria-label="알림">${ICON.bell}<span class="noti-badge" data-badge hidden></span></a>` : ""}</header>`;
   $app.innerHTML = `${bar}${head}<main class="page">${body}</main>${cta ? `<div class="cta">${cta}</div>` : ""}`;
   $app.querySelector("[data-back]")?.addEventListener("click", () => {
@@ -111,11 +111,15 @@ function layout(body, { title, back, cta = "", wide = false, home = false, bell 
   refreshBadge();
 }
 async function refreshBadge() {
+  if (!state.user) return;
+  const set = (el, n) => { if (!el) return; el.hidden = !n; el.textContent = n > 9 ? "9+" : String(n); };
   const el = $app.querySelector("[data-badge]");
-  if (!el || !state.user) return;
-  const n = await api.unreadCount(state.user).catch(() => 0);
-  el.hidden = !n;
-  el.textContent = n > 9 ? "9+" : String(n);
+  if (el) set(el, await api.unreadCount(state.user).catch(() => 0));
+  const mel = $app.querySelector("[data-msg-badge]");
+  if (mel) {
+    const map = await api.unreadMessageMap(state.user, "#/chat/").catch(() => ({}));
+    set(mel, Object.values(map).reduce((a, b) => a + b, 0));
+  }
 }
 function on(sel, ev, fn) { $app.querySelectorAll(sel).forEach((el) => el.addEventListener(ev, fn)); }
 
@@ -144,7 +148,7 @@ function Login() {
   $app.innerHTML = `
     ${api.DEMO ? '<div class="demo-bar">체험 모드 · 버튼을 누르면 체험 계정으로 들어가요</div>' : ""}
     <div class="login">
-      <img src="logo.png?v=3" alt="에딧 커미션" style="height:64px;width:auto;align-self:flex-start" />
+      <img src="logo.png?v=4" alt="에딧 커미션" style="height:64px;width:auto;align-self:flex-start" />
       <h1>에딧 커미션,<br/>이제 걱정 없이 맡기세요</h1>
       <p class="muted" style="margin:0;color:#333">맡기는 순간부터 기념일 당일까지<br/>걱정 없이 맡기는 에딧 커미션</p>
       <div style="flex:1"></div>
@@ -677,7 +681,7 @@ async function Notifications() {
 // ---------------------------------------------------------
 // 메시지
 // ---------------------------------------------------------
-function bubbles(msgs, myId) {
+function bubbles(msgs, mineIsEditor) {
   if (!msgs.length) return '<div class="empty">아직 메시지가 없어요. 궁금한 점이나 요청을 편하게 남겨 주세요.</div>';
   let lastDay = "";
   return msgs.map((m) => {
@@ -685,7 +689,7 @@ function bubbles(msgs, myId) {
     const day = `${d.getMonth() + 1}월 ${d.getDate()}일`;
     const sep = day !== lastDay ? `<div class="chat-day">${day}</div>` : "";
     lastDay = day;
-    const mine = m.sender_id === myId;
+    const mine = !!m.from_editor === !!mineIsEditor;
     const time = `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
     return `${sep}<div class="bubble-row ${mine ? "mine" : ""}"><div class="bubble">${esc(m.body)}</div><span class="muted small">${time}</span></div>`;
   }).join("");
@@ -698,17 +702,19 @@ function mountChat(requestId, { mineIsEditor = false } = {}) {
   if (!listEl) return;
   let msgs = [];
   const paint = (scroll = true) => {
-    listEl.innerHTML = bubbles(msgs, state.user.id);
+    listEl.innerHTML = bubbles(msgs, mineIsEditor);
     if (scroll) { listEl.scrollTop = listEl.scrollHeight; if (!mineIsEditor) window.scrollTo(0, document.body.scrollHeight); }
   };
-  const loadMsgs = async () => { msgs = await api.listMessages(requestId); paint(); };
+  const prefix = mineIsEditor ? "#/editor/chat/" : "#/chat/";
+  const markRead = () => api.markMessagesRead(state.user, requestId, prefix).then(refreshBadge).catch(() => {});
+  const loadMsgs = async () => { msgs = await api.listMessages(requestId); paint(); markRead(); };
   loadMsgs();
   if (chatUnsub) chatUnsub();
   chatUnsub = api.subscribe(state.user, {
     onMessage: (m) => {
       if (m.request_id !== requestId || msgs.some((x) => x.id === m.id)) return;
       if (!document.body.contains(listEl)) return;
-      msgs.push(m); paint();
+      msgs.push(m); paint(); markRead();
     },
   });
   const send = async () => {
@@ -716,7 +722,7 @@ function mountChat(requestId, { mineIsEditor = false } = {}) {
     if (!body) return;
     sendBtn.disabled = true;
     try {
-      const m = await api.sendMessage(state.user, requestId, body);
+      const m = await api.sendMessage(state.user, requestId, body, mineIsEditor);
       if (!msgs.some((x) => x.id === m.id)) msgs.push(m);
       text.value = ""; paint();
     } catch (e) { toast("보내지 못했어요: " + e.message); }
@@ -726,20 +732,55 @@ function mountChat(requestId, { mineIsEditor = false } = {}) {
   text.addEventListener("keydown", (e) => { if (e.key === "Enter" && !e.shiftKey && !e.isComposing) { e.preventDefault(); send(); } });
 }
 
-async function Chat(id) {
+async function Chat(id, editorMode = false) {
   const r = await api.getRequest(id);
-  if (!r) { layout('<div class="empty">요청서를 찾을 수 없어요</div>', { title: "메시지", back: "#/" }); return; }
+  const back = editorMode ? "#/editor/messages" : "#/messages";
+  if (!r) { layout('<div class="empty">요청서를 찾을 수 없어요</div>', { title: "메시지", back }); return; }
   layout(`
-    <a class="card" href="#/request/${esc(r.id)}" style="display:block;text-decoration:none;padding:14px 18px">
+    <a class="card" href="${editorMode ? "#/editor/" : "#/request/"}${esc(r.id)}" style="display:block;text-decoration:none;padding:14px 18px">
       <div class="row"><b class="ellipsis">${esc(titleOf(r))}</b>${statusBadge(r)}</div>
-      <div class="muted small">진행판 보기</div>
+      <div class="muted small">${editorMode ? `${esc(r.profiles?.nickname || "의뢰인")} · 요청서 보기` : "진행판 보기"}</div>
     </a>
     <div class="chat-list page-chat" data-chat-list><div class="empty">불러오는 중…</div></div>
   `, {
-    title: "에디터와 메시지", back: `#/request/${id}`, bell: true,
+    title: editorMode ? `${r.profiles?.nickname || "의뢰인"}님과 메시지` : "에디터와 메시지", back, bell: true, wide: editorMode,
     cta: `<div class="chat-input"><textarea class="textarea" rows="1" placeholder="메시지를 입력하세요" data-chat-text maxlength="2000"></textarea><button class="btn-mini dark" data-chat-send>보내기</button></div>`,
   });
-  mountChat(id);
+  mountChat(id, { mineIsEditor: editorMode });
+}
+const EditorChat = (id) => Chat(id, true);
+
+// 대화 목록 (의뢰인: 내 의뢰들 / 에디터: 전체)
+async function Inbox(editorMode = false) {
+  const reqs = editorMode ? await api.listAllRequests() : await api.listMyRequests(state.user);
+  const [last, unread] = await Promise.all([
+    api.latestMessages(editorMode ? null : reqs.map((r) => r.id)),
+    api.unreadMessageMap(state.user, editorMode ? "#/editor/chat/" : "#/chat/"),
+  ]);
+  const rows = reqs.filter((r) => editorMode ? last[r.id] : r.status !== "cancelled" || last[r.id])
+    .sort((a, b) => ((last[b.id]?.created_at) || b.created_at).localeCompare((last[a.id]?.created_at) || a.created_at));
+  const tabs = editorMode ? editorTabs("messages", Object.values(unread).reduce((a, b) => a + b, 0)) : "";
+  layout(`
+    ${tabs}
+    ${rows.length ? rows.map((r) => {
+      const m = last[r.id];
+      const n = unread[r.id] || 0;
+      return `<a class="card inbox-row" href="${editorMode ? "#/editor/chat/" : "#/chat/"}${esc(r.id)}" style="display:block;text-decoration:none">
+        <div class="row"><b class="ellipsis">${editorMode ? esc(r.profiles?.nickname || "의뢰인") + " · " : ""}${esc(titleOf(r))}</b>
+          ${n ? `<span class="count-pill">${n > 9 ? "9+" : n}</span>` : `<span class="muted small nowrap">${m ? fmtDateTime(m.created_at) : ""}</span>`}</div>
+        <div class="muted small ellipsis" style="margin-top:4px">${m ? `${m.from_editor === editorMode ? "나: " : ""}${esc(m.body)}` : "아직 메시지가 없어요 · 눌러서 대화 시작"}</div>
+      </a>`;
+    }).join("") : `<div class="card empty" style="padding:36px 0">${editorMode ? "아직 받은 메시지가 없어요" : "진행 중인 의뢰가 없어요<br/>의뢰를 맡기면 에디터와 메시지를 주고받을 수 있어요"}</div>`}
+  `, { title: editorMode ? "에디터 페이지" : "메시지", back: editorMode ? "#/me" : "#/", bell: true, wide: editorMode });
+}
+const ClientInbox = () => Inbox(false);
+const EditorInbox = () => Inbox(true);
+
+function editorTabs(active, unreadMsgs = 0) {
+  return `<div class="seg">
+    <a class="seg-btn ${active === "requests" ? "on" : ""}" href="#/editor">요청서</a>
+    <a class="seg-btn ${active === "messages" ? "on" : ""}" href="#/editor/messages">메시지${unreadMsgs ? ` <span class="count-pill">${unreadMsgs > 9 ? "9+" : unreadMsgs}</span>` : ""}</a>
+  </div>`;
 }
 
 // ---------------------------------------------------------
@@ -759,7 +800,9 @@ async function EditorList() {
   const f = sessionStorage.getItem("ec-filter") || "pay";
   const [, , fn] = FILTERS.find((x) => x[0] === f) || FILTERS[0];
   const list = all.filter(fn);
+  const unreadMsgs = Object.values(await api.unreadMessageMap(state.user, "#/editor/chat/")).reduce((a, b) => a + b, 0);
   layout(`
+    ${editorTabs("requests", unreadMsgs)}
     <div class="tabs">${FILTERS.map(([k, label, ff]) => `<button class="tab ${k === f ? "on" : ""}" data-filter="${k}">${label} ${all.filter(ff).length}</button>`).join("")}</div>
     <div style="margin-top:16px">
       ${list.length ? list.map((r) => `
@@ -906,7 +949,10 @@ const ROUTES = [
   [/^#\/me$/, MyPage],
   [/^#\/notifications$/, Notifications],
   [/^#\/chat\/([\w-]+)$/, Chat],
+  [/^#\/messages$/, ClientInbox],
   [/^#\/editor$/, EditorList, true, true],
+  [/^#\/editor\/messages$/, EditorInbox, true, true],
+  [/^#\/editor\/chat\/([\w-]+)$/, EditorChat, true, true],
   [/^#\/editor\/([\w-]+)$/, EditorDetail, true, true],
 ];
 
@@ -934,6 +980,9 @@ function startLive() {
       toast("🔔 " + n.title);
       refreshBadge();
       if (location.hash === "#/notifications") Notifications();
+      if (n.kind === "message" && location.hash === "#/messages") ClientInbox();
+      if (n.kind === "message" && location.hash === "#/editor/messages") EditorInbox();
+      if (location.hash === "#/editor") EditorList();
     },
   });
 }

@@ -333,23 +333,59 @@ export async function listMessages(requestId) {
     .order("created_at", { ascending: true }));
 }
 
-export async function sendMessage(user, requestId, body) {
+export async function sendMessage(user, requestId, body, fromEditor = false) {
   if (DEMO) {
     const s = load();
     s.messages = s.messages || [];
-    const m = { id: uid(), request_id: requestId, sender_id: user.id, body, created_at: new Date().toISOString() };
+    const m = { id: uid(), request_id: requestId, sender_id: user.id, from_editor: !!fromEditor, body, created_at: new Date().toISOString() };
     s.messages.push(m);
     const r = s.requests.find((x) => x.id === requestId);
     if (r) {
-      const fromClient = r.user_id === user.id && !location.hash.startsWith("#/editor");
-      demoNotify(s, user.id, fromClient
-        ? { request_id: r.id, kind: "message", title: "새 메시지가 왔어요", body: `${demoTitle(r)} · ${body.slice(0, 80)}`, link: `#/editor/${r.id}` }
-        : { request_id: r.id, kind: "message", title: "에디터가 메시지를 보냈어요", body: body.slice(0, 80), link: `#/chat/${r.id}` });
+      if (fromEditor) demoNotify(s, r.user_id, { request_id: r.id, kind: "message", title: "에디터가 메시지를 보냈어요", body: body.slice(0, 80), link: `#/chat/${r.id}` });
+      else demoNotify(s, "demo-me", { request_id: r.id, kind: "message", title: "의뢰인이 메시지를 보냈어요", body: `${demoTitle(r)} · ${body.slice(0, 80)}`, link: `#/editor/chat/${r.id}` });
     }
     save(s);
     return m;
   }
-  return check(await sb.from("messages").insert({ request_id: requestId, body }).select().single());
+  return check(await sb.from("messages").insert({ request_id: requestId, body, from_editor: !!fromEditor }).select().single());
+}
+
+// 대화방 목록용: 요청서별 마지막 메시지
+export async function latestMessages(requestIds) {
+  let rows;
+  if (DEMO) rows = (load().messages || []).slice().sort((a, b) => b.created_at.localeCompare(a.created_at));
+  else {
+    let q = sb.from("messages").select("*").order("created_at", { ascending: false }).limit(1000);
+    if (requestIds) q = q.in("request_id", requestIds.length ? requestIds : ["00000000-0000-0000-0000-000000000000"]);
+    rows = check(await q);
+  }
+  const last = {};
+  for (const m of rows) if (!last[m.request_id] && (!requestIds || requestIds.includes(m.request_id))) last[m.request_id] = m;
+  return last;
+}
+
+// 메시지 알림 중 안 읽은 것 (요청서별)
+export async function unreadMessageMap(user, linkPrefix) {
+  let rows;
+  if (DEMO) rows = (load().notifications || []).filter((n) => n.user_id === user.id && !n.read_at && n.kind === "message");
+  else rows = check(await sb.from("notifications").select("request_id, link").eq("user_id", user.id).eq("kind", "message").is("read_at", null));
+  const map = {};
+  for (const n of rows) if (!linkPrefix || (n.link || "").startsWith(linkPrefix)) map[n.request_id] = (map[n.request_id] || 0) + 1;
+  return map;
+}
+
+export async function markMessagesRead(user, requestId, linkPrefix) {
+  const now = new Date().toISOString();
+  if (DEMO) {
+    const s = load();
+    (s.notifications || []).forEach((n) => {
+      if (n.user_id === user.id && n.request_id === requestId && n.kind === "message" && !n.read_at && (n.link || "").startsWith(linkPrefix)) n.read_at = now;
+    });
+    save(s);
+    return;
+  }
+  await sb.from("notifications").update({ read_at: now }).eq("user_id", user.id).eq("request_id", requestId)
+    .eq("kind", "message").is("read_at", null).like("link", linkPrefix + "%");
 }
 
 export function resetDemo() {
