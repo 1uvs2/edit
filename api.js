@@ -433,6 +433,51 @@ export async function markMessagesRead(user, requestId, linkPrefix) {
     .eq("kind", "message").is("read_at", null).like("link", linkPrefix + "%");
 }
 
+// ---------------------------------------------------------
+// 공지사항
+// ---------------------------------------------------------
+const sortNotices = (a, b) => (b.pinned - a.pinned) || b.created_at.localeCompare(a.created_at);
+
+export async function listNotices(limit = 100) {
+  if (DEMO) return (load().notices || []).slice().sort(sortNotices).slice(0, limit);
+  return check(await sb.from("notices").select("*").order("pinned", { ascending: false })
+    .order("created_at", { ascending: false }).limit(limit));
+}
+
+export async function getNotice(id) {
+  if (DEMO) return (load().notices || []).find((n) => n.id === id) || null;
+  return check(await sb.from("notices").select("*").eq("id", id).maybeSingle());
+}
+
+export async function saveNotice(n) {
+  const row = { title: n.title, body: n.body || "", pinned: !!n.pinned };
+  if (DEMO) {
+    const s = load();
+    s.notices = s.notices || [];
+    const now = new Date().toISOString();
+    if (n.id) { Object.assign(s.notices.find((x) => x.id === n.id), row, { updated_at: now }); save(s); return s.notices.find((x) => x.id === n.id); }
+    const created = { id: uid(), created_at: now, updated_at: now, ...row };
+    s.notices.push(created); save(s); return created;
+  }
+  if (n.id) return check(await sb.from("notices").update(row).eq("id", n.id).select().single());
+  return check(await sb.from("notices").insert(row).select().single());
+}
+
+export async function deleteNotice(id) {
+  if (DEMO) { const s = load(); s.notices = (s.notices || []).filter((x) => x.id !== id); save(s); return; }
+  check(await sb.from("notices").delete().eq("id", id));
+}
+
+export async function broadcastNotice(notice) {
+  if (DEMO) {
+    const s = load();
+    Object.keys(s.profiles).forEach((uidv) => demoNotify(s, uidv, { kind: "notice", title: "새 공지사항이 있어요", body: notice.title, link: `#/notices/${notice.id}` }));
+    save(s);
+    return;
+  }
+  check(await sb.rpc("broadcast_notice", { nid: notice.id }));
+}
+
 export function resetDemo() {
   try { localStorage.removeItem(KEY); } catch {}
 }

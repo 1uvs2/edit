@@ -1,4 +1,4 @@
-import * as api from "./api.js?v=6";
+import * as api from "./api.js?v=7";
 
 const CFG = window.APP_CONFIG;
 const P = CFG.PRICES;
@@ -101,7 +101,7 @@ function layout(body, { title, back, cta = "", wide = false, home = false, bell 
   $app.className = "app" + (wide ? " wide" : "");
   const bar = api.DEMO ? '<div class="demo-bar">체험 모드 · 이 기기에만 저장돼요 (config.js 에 Supabase 키를 넣으면 실제 서비스로 바뀌어요)</div>' : "";
   const head = home
-    ? `<header class="top"><span class="logo"><img src="logo.png?v=6" alt="에딧 커미션" style="height:34px;width:auto;display:block" /></span><a class="icon-btn bell" href="#/messages" aria-label="메시지">${ICON.chat.replace(/18/g, "22")}<span class="noti-badge" data-msg-badge hidden></span></a><a class="icon-btn bell" href="#/notifications" aria-label="알림">${ICON.bell}<span class="noti-badge" data-badge hidden></span></a><a class="icon-btn" href="#/me" aria-label="마이페이지">${ICON.user}</a></header>`
+    ? `<header class="top"><span class="logo"><img src="logo.png?v=7" alt="에딧 커미션" style="height:34px;width:auto;display:block" /></span><a class="icon-btn bell" href="#/messages" aria-label="메시지">${ICON.chat.replace(/18/g, "22")}<span class="noti-badge" data-msg-badge hidden></span></a><a class="icon-btn bell" href="#/notifications" aria-label="알림">${ICON.bell}<span class="noti-badge" data-badge hidden></span></a><a class="icon-btn" href="#/me" aria-label="마이페이지">${ICON.user}</a></header>`
     : `<header class="top">${back !== false ? `<button class="back" data-back aria-label="뒤로">${ICON.back}</button>` : ""}<h1>${esc(title || "")}</h1>${bell ? `<a class="icon-btn bell" href="#/notifications" aria-label="알림">${ICON.bell}<span class="noti-badge" data-badge hidden></span></a>` : ""}</header>`;
   $app.innerHTML = `${bar}${head}<main class="page">${body}</main>${cta ? `<div class="cta">${cta}</div>` : ""}`;
   $app.querySelector("[data-back]")?.addEventListener("click", () => {
@@ -149,7 +149,7 @@ function Login() {
   $app.innerHTML = `
     ${api.DEMO ? '<div class="demo-bar">체험 모드 · 버튼을 누르면 체험 계정으로 들어가요</div>' : ""}
     <div class="login">
-      <img src="logo.png?v=6" alt="에딧 커미션" style="height:64px;width:auto;align-self:flex-start" />
+      <img src="logo.png?v=7" alt="에딧 커미션" style="height:64px;width:auto;align-self:flex-start" />
       <h1>에딧 커미션,<br/>이제 걱정 없이 맡기세요</h1>
       <p class="muted" style="margin:0;color:#333">맡기는 순간부터 기념일 당일까지<br/>걱정 없이 맡기는 에딧 커미션</p>
       <div style="flex:1"></div>
@@ -172,7 +172,7 @@ function Login() {
 // 홈
 // ---------------------------------------------------------
 async function Home() {
-  const reqs = await api.listMyRequests(state.user);
+  const [reqs, notices] = await Promise.all([api.listMyRequests(state.user), api.listNotices(2).catch(() => [])]);
   const active = reqs.find((r) => r.status !== "cancelled" && r.stage < 5);
   const p = state.profile || {};
 
@@ -204,6 +204,15 @@ async function Home() {
       </div>
     </div>` : "";
 
+  const noticeCard = notices.length ? `
+    <div class="card" style="margin-top:22px;padding-top:16px;padding-bottom:6px">
+      <div class="row"><span class="title-m">공지사항</span><a class="link-accent" href="#/notices" style="text-decoration:none">전체 보기</a></div>
+      <div class="rows">${notices.map((n) => `
+        <a class="row" href="#/notices/${esc(n.id)}" style="text-decoration:none;justify-content:flex-start;gap:8px">
+          ${n.pinned ? '<span class="badge">고정</span>' : ""}<span class="ellipsis" style="flex:1">${esc(n.title)}</span><span class="muted small nowrap">${fmtDate(n.created_at.slice(0, 10))}</span>
+        </a>`).join("")}</div>
+    </div>` : "";
+
   const priceRows = Object.entries(TYPES).map(([k, t]) => `
     <div class="row"><span><b>${t.label}</b> <span class="small">${esc(t.title.split("· ")[1])} [${esc(t.desc)}]</span></span><b class="nowrap">${won(P[k])}</b></div>`).join("");
 
@@ -211,6 +220,7 @@ async function Home() {
     ${deliveredCards}
     ${activeCard}
     ${draftCard}
+    ${noticeCard}
     <div class="card" style="margin-top:22px">
       <div class="title-m" style="margin-bottom:4px">가격</div>
       <div class="rows">${priceRows}</div>
@@ -735,7 +745,7 @@ async function MyPage() {
 // ---------------------------------------------------------
 // 알림함
 // ---------------------------------------------------------
-const NOTI_ICON = { message: "💬", stage: "🎬", confirmed: "✅", preview: "👀", cancelled: "⚠️", new_request: "📩", revision: "✏️", approved: "💗", delivered: "🎁", received: "📦" };
+const NOTI_ICON = { message: "💬", stage: "🎬", confirmed: "✅", preview: "👀", cancelled: "⚠️", new_request: "📩", revision: "✏️", approved: "💗", delivered: "🎁", received: "📦", notice: "📢" };
 async function Notifications() {
   const list = await api.listNotifications(state.user);
   layout(`
@@ -848,10 +858,113 @@ async function Inbox(editorMode = false) {
 const ClientInbox = () => Inbox(false);
 const EditorInbox = () => Inbox(true);
 
+// ---------------------------------------------------------
+// 공지사항
+// ---------------------------------------------------------
+async function Notices() {
+  const list = await api.listNotices();
+  layout(list.length ? `<div class="card" style="padding-top:4px;padding-bottom:4px"><div class="rows">${list.map((n) => `
+      <a class="row" href="#/notices/${esc(n.id)}" style="text-decoration:none;align-items:flex-start">
+        <span style="min-width:0;flex:1">${n.pinned ? '<span class="badge" style="margin-right:6px">고정</span>' : ""}<b>${esc(n.title)}</b>
+          <span class="muted small" style="display:block;margin-top:2px">${fmtDateTime(n.created_at)}</span></span>${ICON.right}
+      </a>`).join("")}</div></div>` : '<div class="card empty" style="padding:40px 0">아직 공지사항이 없어요</div>',
+  { title: "공지사항", back: "#/", bell: true });
+}
+
+async function NoticeDetail(id) {
+  const n = await api.getNotice(id);
+  if (!n) { layout('<div class="empty">공지사항을 찾을 수 없어요</div>', { title: "공지사항", back: "#/notices" }); return; }
+  layout(`
+    <div class="card">
+      ${n.pinned ? '<span class="badge">고정</span>' : ""}
+      <h2 style="font-size:20px;margin:8px 0 4px;line-height:1.4">${esc(n.title)}</h2>
+      <div class="muted small">${fmtDateTime(n.created_at)}${n.updated_at && n.updated_at.slice(0, 16) !== n.created_at.slice(0, 16) ? ` · ${fmtDateTime(n.updated_at)} 수정` : ""}</div>
+      <div style="margin-top:18px;white-space:pre-wrap;word-break:break-word;line-height:1.7">${linkify(n.body)}</div>
+    </div>`, { title: "공지사항", back: "#/notices", bell: true });
+}
+
+// 본문 속 링크를 눌러서 열 수 있게
+function linkify(text) {
+  return esc(text).replace(/https?:\/\/[^\s<]+/g, (u) => {
+    const raw = u.replace(/&amp;/g, "&");
+    return safeUrl(raw) ? `<a href="${u}" target="_blank" rel="noopener noreferrer" class="link-accent">${u}</a>` : u;
+  });
+}
+
+async function EditorNotices() {
+  const list = await api.listNotices();
+  const editId = sessionStorage.getItem("ec-notice-edit");
+  const cur = list.find((n) => n.id === editId) || { title: "", body: "", pinned: false };
+  layout(`
+    ${editorTabs("notices")}
+    <div class="card">
+      <div class="title-m">${cur.id ? "공지 수정" : "새 공지 쓰기"}</div>
+      <input class="input field" maxlength="100" placeholder="제목" value="${esc(cur.title)}" data-n-title />
+      <textarea class="textarea field" style="height:180px" maxlength="5000" placeholder="내용 (링크를 넣으면 눌러서 열 수 있어요)" data-n-body>${esc(cur.body)}</textarea>
+      <div class="check-row" data-n-pin role="checkbox" aria-checked="${!!cur.pinned}" tabindex="0">
+        <span class="checkbox ${cur.pinned ? "on" : ""}">${cur.pinned ? ICON.checkSm : ""}</span><span>맨 위에 고정</span>
+      </div>
+      <div class="check-row" data-n-notify role="checkbox" aria-checked="${!cur.id}" tabindex="0">
+        <span class="checkbox ${!cur.id ? "on" : ""}">${!cur.id ? ICON.checkSm : ""}</span><span>모든 회원에게 알림 보내기</span>
+      </div>
+      <div class="grid-2" style="margin-top:16px">
+        <button class="btn-sub" style="background:#f3f3f3" data-n-cancel>${cur.id ? "수정 취소" : "비우기"}</button>
+        <button class="btn-sub" data-n-save>${cur.id ? "수정 저장" : "공지 올리기"}</button>
+      </div>
+    </div>
+    <div class="section-title">올린 공지 ${list.length}개</div>
+    ${list.length ? `<div class="card" style="padding-top:4px;padding-bottom:4px"><div class="rows">${list.map((n) => `
+      <div class="row">
+        <a href="#/notices/${esc(n.id)}" style="min-width:0;flex:1;text-decoration:none">${n.pinned ? '<span class="badge" style="margin-right:6px">고정</span>' : ""}<b>${esc(n.title)}</b>
+          <span class="muted small" style="display:block">${fmtDateTime(n.created_at)}</span></a>
+        <div class="row" style="gap:6px;flex:none">
+          <button class="btn-mini" data-n-edit="${esc(n.id)}">수정</button>
+          <button class="btn-mini danger" data-n-del="${esc(n.id)}">삭제</button>
+        </div>
+      </div>`).join("")}</div></div>` : '<div class="card empty">아직 올린 공지가 없어요</div>'}
+  `, { title: "에디터 페이지", back: "#/me", wide: true, bell: true });
+
+  const flags = { pinned: !!cur.pinned, notify: !cur.id };
+  const toggle = (sel, key) => {
+    const el = $app.querySelector(sel);
+    const flip = () => {
+      flags[key] = !flags[key];
+      el.setAttribute("aria-checked", flags[key]);
+      const cb = el.querySelector(".checkbox"); cb.classList.toggle("on", flags[key]); cb.innerHTML = flags[key] ? ICON.checkSm : "";
+    };
+    el.addEventListener("click", flip);
+    el.addEventListener("keydown", (e) => { if (e.key === " " || e.key === "Enter") { e.preventDefault(); flip(); } });
+  };
+  toggle("[data-n-pin]", "pinned");
+  toggle("[data-n-notify]", "notify");
+  on("[data-n-cancel]", "click", () => { sessionStorage.removeItem("ec-notice-edit"); EditorNotices(); });
+  on("[data-n-edit]", "click", (e) => { sessionStorage.setItem("ec-notice-edit", e.currentTarget.dataset.nEdit); EditorNotices(); });
+  on("[data-n-del]", "click", async (e) => {
+    if (!confirm("이 공지를 삭제할까요?")) return;
+    await api.deleteNotice(e.currentTarget.dataset.nDel);
+    sessionStorage.removeItem("ec-notice-edit");
+    toast("공지를 삭제했어요"); EditorNotices();
+  });
+  on("[data-n-save]", "click", async (e) => {
+    const title = $app.querySelector("[data-n-title]").value.trim();
+    const body = $app.querySelector("[data-n-body]").value.trim();
+    if (!title) { toast("제목을 적어 주세요"); return; }
+    e.currentTarget.disabled = true;
+    try {
+      const saved = await api.saveNotice({ id: cur.id, title, body, pinned: flags.pinned });
+      if (flags.notify) await api.broadcastNotice(saved);
+      sessionStorage.removeItem("ec-notice-edit");
+      toast(flags.notify ? "공지를 올리고 모든 회원에게 알렸어요" : (cur.id ? "공지를 수정했어요" : "공지를 올렸어요"));
+      EditorNotices();
+    } catch (err) { toast("저장하지 못했어요: " + err.message); e.currentTarget.disabled = false; }
+  });
+}
+
 function editorTabs(active, unreadMsgs = 0) {
   return `<div class="seg">
     <a class="seg-btn ${active === "requests" ? "on" : ""}" href="#/editor">요청서</a>
     <a class="seg-btn ${active === "messages" ? "on" : ""}" href="#/editor/messages">메시지${unreadMsgs ? ` <span class="count-pill">${unreadMsgs > 9 ? "9+" : unreadMsgs}</span>` : ""}</a>
+    <a class="seg-btn ${active === "notices" ? "on" : ""}" href="#/editor/notices">공지</a>
   </div>`;
 }
 
@@ -1043,8 +1156,11 @@ const ROUTES = [
   [/^#\/notifications$/, Notifications],
   [/^#\/chat\/([\w-]+)$/, Chat],
   [/^#\/messages$/, ClientInbox],
+  [/^#\/notices$/, Notices],
+  [/^#\/notices\/([\w-]+)$/, NoticeDetail],
   [/^#\/editor$/, EditorList, true, true],
   [/^#\/editor\/messages$/, EditorInbox, true, true],
+  [/^#\/editor\/notices$/, EditorNotices, true, true],
   [/^#\/editor\/chat\/([\w-]+)$/, EditorChat, true, true],
   [/^#\/editor\/([\w-]+)$/, EditorDetail, true, true],
 ];

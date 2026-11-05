@@ -282,7 +282,7 @@ input[type="date"] { min-width: 0; max-width: 100%; }
 .chat-input .btn-mini { height: 48px; padding: 0 18px; }
 
 /* 메시지 목록 · 에디터 탭 */
-.seg { display: grid; grid-template-columns: 1fr 1fr; background: #ececee; border-radius: 14px; padding: 4px; margin-bottom: 14px; }
+.seg { display: grid; grid-template-columns: repeat(3, 1fr); background: #ececee; border-radius: 14px; padding: 4px; margin-bottom: 14px; }
 .seg-btn { height: 40px; border-radius: 11px; display: flex; align-items: center; justify-content: center; gap: 6px; font-weight: 700; text-decoration: none; color: var(--text-sub); }
 .seg-btn.on { background: #fff; color: var(--text); box-shadow: 0 2px 8px rgba(0,0,0,.06); }
 .count-pill { min-width: 20px; height: 20px; padding: 0 6px; border-radius: 20px; background: #ff4f8b; color: #fff; font-size: 11px; font-weight: 700; display: inline-grid; place-items: center; flex: none; }
