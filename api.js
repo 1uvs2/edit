@@ -56,7 +56,7 @@ function seedOther(s) {
     notes: "밝고 경쾌한 분위기로 부탁드려요", credit: "edit by @other", ratio: "16:9",
     deadline: d(14), upload_date: d(15), edit_type: "A", extra_sec: 10,
     opt_private: false, opt_fast: false, opt_commercial: false, depositor: "김의뢰",
-    status: "awaiting_payment", stage: 0, stage_dates: {}, revision_count: 0, client_approved_stage: 0,
+    status: "pending_review", stage: 0, stage_dates: {}, revision_count: 0, client_approved_stage: 0,
   };
   r.total = demoTotal(r);
   s.requests.push(r);
@@ -197,9 +197,10 @@ export async function createRequest(user, draft) {
   row.upload_date = row.upload_date || null;
   if (DEMO) {
     const s = load();
+    if (s.profiles[user.id]?.blocked) throw new Error("이용이 제한된 계정이에요. 에디터에게 문의해 주세요.");
     const r = {
       ...row, id: uid(), user_id: user.id, created_at: new Date().toISOString(),
-      status: "awaiting_payment", stage: 0, stage_dates: {}, revision_count: 0, client_approved_stage: 0,
+      status: "pending_review", stage: 0, stage_dates: {}, revision_count: 0, client_approved_stage: 0,
     };
     r.total = demoTotal(r);
     s.requests.push(r);
@@ -275,11 +276,12 @@ export async function editorUpdate(id, patch) {
     s.requests[i] = r;
     const ttl = demoTitle(r), link = `#/request/${r.id}`;
     const deliveredNow = r.delivery_url && r.delivery_url !== old.delivery_url;
+    if (old.status === "pending_review" && r.status === "awaiting_payment") demoNotify(s, r.user_id, { request_id: r.id, kind: "approved_request", title: "요청서가 승인됐어요", body: `${ttl} · 진행판에서 입금 계좌를 확인해 주세요`, link });
     if (deliveredNow) demoNotify(s, r.user_id, { request_id: r.id, kind: "delivered", title: "완성된 영상이 도착했어요", body: `${ttl} · 진행판에서 영상을 받아 주세요`, link });
     if (old.status !== "confirmed" && r.status === "confirmed") demoNotify(s, r.user_id, { request_id: r.id, kind: "confirmed", title: "입금이 확인됐어요", body: `${ttl} 작업을 시작할게요`, link });
     else if (r.stage !== old.stage && r.stage > 0 && !(deliveredNow && r.stage === 5)) demoNotify(s, r.user_id, { request_id: r.id, kind: "stage", title: r.stage === 5 ? "에딧이 납품됐어요" : "진행 상황이 바뀌었어요", body: `${ttl} · ${STAGE_NAMES[r.stage]}${r.stage === 5 ? " 완료" : " 단계 진행 중"}`, link });
     if (r.preview_url && r.preview_url !== old.preview_url) demoNotify(s, r.user_id, { request_id: r.id, kind: "preview", title: "새 미리보기가 도착했어요", body: r.preview_label || ttl, link });
-    if (r.status === "cancelled" && old.status !== "cancelled") demoNotify(s, r.user_id, { request_id: r.id, kind: "cancelled", title: "의뢰가 취소되었어요", body: ttl, link });
+    if (r.status === "cancelled" && old.status !== "cancelled") demoNotify(s, r.user_id, { request_id: r.id, kind: "cancelled", title: old.status === "pending_review" ? "요청서가 반려되었어요" : "의뢰가 취소되었어요", body: ttl + (r.cancel_reason ? " · " + r.cancel_reason : ""), link });
     save(s);
     return s.requests[i];
   }
@@ -476,6 +478,53 @@ export async function broadcastNotice(notice) {
     return;
   }
   check(await sb.rpc("broadcast_notice", { nid: notice.id }));
+}
+
+// ---------------------------------------------------------
+// 입금 계좌 (승인된 요청서에만 공개)
+// ---------------------------------------------------------
+export async function getBankAccount(requestId) {
+  if (DEMO) {
+    const s = load();
+    const r = s.requests.find((x) => x.id === requestId);
+    return r && ["awaiting_payment", "confirmed"].includes(r.status) ? (s.bank || CFG.BANK) : null;
+  }
+  const { data, error } = await sb.rpc("get_bank_account", { rid: requestId });
+  if (error) return null;
+  return data;
+}
+
+export async function getBankSettings() {
+  if (DEMO) return load().bank || CFG.BANK;
+  const { data } = await sb.from("app_settings").select("value").eq("key", "bank").maybeSingle();
+  return data?.value || null;
+}
+
+export async function saveBankSettings(bank) {
+  if (DEMO) { const s = load(); s.bank = bank; save(s); return bank; }
+  check(await sb.from("app_settings").upsert({ key: "bank", value: bank, updated_at: new Date().toISOString() }));
+  return bank;
+}
+
+// ---------------------------------------------------------
+// 회원 관리 (에디터)
+// ---------------------------------------------------------
+export async function listMembers() {
+  if (DEMO) {
+    const s = load();
+    return Object.values(s.profiles).map((p) => {
+      const mine = s.requests.filter((r) => r.user_id === p.id);
+      return { ...p, created_at: p.created_at || new Date().toISOString(), last_sign_in_at: p.id === s.user?.id ? new Date().toISOString() : null,
+        blocked: !!p.blocked, is_editor: p.id === "demo-me", request_count: mine.length,
+        total_paid: mine.filter((r) => r.status === "confirmed").reduce((a, r) => a + r.total, 0) };
+    });
+  }
+  return check(await sb.rpc("list_members"));
+}
+
+export async function updateMember(id, patch) {
+  if (DEMO) { const s = load(); s.profiles[id] = { ...s.profiles[id], ...patch }; save(s); return s.profiles[id]; }
+  return check(await sb.from("profiles").update(patch).eq("id", id).select().single());
 }
 
 export function resetDemo() {

@@ -8,11 +8,12 @@ window.APP_CONFIG = {
   SUPABASE_URL: "https://gncbofrvhuqbyewolyxn.supabase.co",
   SUPABASE_ANON_KEY: "sb_publishable_dBno8Oieh_V22aOLWX1uEA_T6nl-XwC",
 
-  // 입금 받을 계좌
+  // 입금 계좌는 이제 데이터베이스에 보관해요 (에디터 페이지 → 회원·설정 탭에서 변경).
+  // 아래는 체험 모드에서만 보이는 예시 값이에요.
   BANK: {
-    name: "국민은행",
-    number: "852501-04-191795",
-    holder: "배서은",
+    name: "체험은행",
+    number: "000-0000-0000",
+    holder: "에디터",
   },
 
   // 가격 (supabase/schema.sql 의 compute_total 과 같은 값이어야 해요)

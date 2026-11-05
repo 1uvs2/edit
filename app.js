@@ -1,4 +1,4 @@
-import * as api from "./api.js?v=7";
+import * as api from "./api.js?v=8";
 
 const CFG = window.APP_CONFIG;
 const P = CFG.PRICES;
@@ -101,7 +101,7 @@ function layout(body, { title, back, cta = "", wide = false, home = false, bell 
   $app.className = "app" + (wide ? " wide" : "");
   const bar = api.DEMO ? '<div class="demo-bar">체험 모드 · 이 기기에만 저장돼요 (config.js 에 Supabase 키를 넣으면 실제 서비스로 바뀌어요)</div>' : "";
   const head = home
-    ? `<header class="top"><span class="logo"><img src="logo.png?v=7" alt="에딧 커미션" style="height:34px;width:auto;display:block" /></span><a class="icon-btn bell" href="#/messages" aria-label="메시지">${ICON.chat.replace(/18/g, "22")}<span class="noti-badge" data-msg-badge hidden></span></a><a class="icon-btn bell" href="#/notifications" aria-label="알림">${ICON.bell}<span class="noti-badge" data-badge hidden></span></a><a class="icon-btn" href="#/me" aria-label="마이페이지">${ICON.user}</a></header>`
+    ? `<header class="top"><span class="logo"><img src="logo.png?v=8" alt="에딧 커미션" style="height:34px;width:auto;display:block" /></span><a class="icon-btn bell" href="#/messages" aria-label="메시지">${ICON.chat.replace(/18/g, "22")}<span class="noti-badge" data-msg-badge hidden></span></a><a class="icon-btn bell" href="#/notifications" aria-label="알림">${ICON.bell}<span class="noti-badge" data-badge hidden></span></a><a class="icon-btn" href="#/me" aria-label="마이페이지">${ICON.user}</a></header>`
     : `<header class="top">${back !== false ? `<button class="back" data-back aria-label="뒤로">${ICON.back}</button>` : ""}<h1>${esc(title || "")}</h1>${bell ? `<a class="icon-btn bell" href="#/notifications" aria-label="알림">${ICON.bell}<span class="noti-badge" data-badge hidden></span></a>` : ""}</header>`;
   $app.innerHTML = `${bar}${head}<main class="page">${body}</main>${cta ? `<div class="cta">${cta}</div>` : ""}`;
   $app.querySelector("[data-back]")?.addEventListener("click", () => {
@@ -123,17 +123,20 @@ async function refreshBadge() {
 }
 function on(sel, ev, fn) { $app.querySelectorAll(sel).forEach((el) => el.addEventListener(ev, fn)); }
 
-function accountBox(amount) {
-  const b = CFG.BANK;
+let shownBank = null;
+function accountBox(amount, bank) {
+  const b = bank || {};
+  shownBank = b;
   return `<div class="account">
     <div class="row"><span class="muted small">${esc(b.name)} · 예금주 ${esc(b.holder)}</span>${amount != null ? `<span class="bold">${won(amount)}</span>` : ""}</div>
     <div class="row" style="margin-top:6px"><span class="num">${esc(b.number)}</span><button class="btn-mini dark" data-copy>복사</button></div>
   </div>`;
 }
-function bindCopy() { on("[data-copy]", "click", () => copy(CFG.BANK.number.replace(/[^0-9]/g, "") || CFG.BANK.number)); }
+function bindCopy() { on("[data-copy]", "click", () => { const n = shownBank?.number || ""; copy(n.replace(/[^0-9]/g, "") || n); }); }
 
 function statusBadge(r) {
   if (r.status === "cancelled") return '<span class="badge red">취소됨</span>';
+  if (r.status === "pending_review") return '<span class="badge gray">승인 대기</span>';
   if (r.status === "awaiting_payment") return '<span class="badge gray">입금 확인 중</span>';
   if (r.stage >= 5 && r.delivery_url && r.received_at) return '<span class="badge green">받기 완료</span>';
   if (r.stage >= 5) return '<span class="badge green">납품 완료</span>';
@@ -149,7 +152,7 @@ function Login() {
   $app.innerHTML = `
     ${api.DEMO ? '<div class="demo-bar">체험 모드 · 버튼을 누르면 체험 계정으로 들어가요</div>' : ""}
     <div class="login">
-      <img src="logo.png?v=7" alt="에딧 커미션" style="height:64px;width:auto;align-self:flex-start" />
+      <img src="logo.png?v=8" alt="에딧 커미션" style="height:64px;width:auto;align-self:flex-start" />
       <h1>에딧 커미션,<br/>이제 걱정 없이 맡기세요</h1>
       <p class="muted" style="margin:0;color:#333">맡기는 순간부터 기념일 당일까지<br/>걱정 없이 맡기는 에딧 커미션</p>
       <div style="flex:1"></div>
@@ -217,6 +220,7 @@ async function Home() {
     <div class="row"><span><b>${t.label}</b> <span class="small">${esc(t.title.split("· ")[1])} [${esc(t.desc)}]</span></span><b class="nowrap">${won(P[k])}</b></div>`).join("");
 
   layout(`
+    ${p.blocked ? '<div class="notice" style="margin-bottom:12px">이용이 제한된 계정이라 새 요청서를 보낼 수 없어요. 에디터에게 메시지로 문의해 주세요.</div>' : ""}
     ${deliveredCards}
     ${activeCard}
     ${draftCard}
@@ -446,8 +450,8 @@ function Pay() {
 
     <div class="section-title">결제 수단</div>
     <div class="card">
-      <div class="row"><b>계좌이체</b><span class="muted small">요청서를 보낸 뒤 입금해 주세요</span></div>
-      ${accountBox(c.total)}
+      <div class="row"><b>계좌이체</b></div>
+      <div class="notice" style="margin-top:10px">요청서를 보내면 에디터가 내용을 확인하고 <b>승인</b>해요.<br/>승인되면 진행판에서 <b>입금 계좌</b>를 확인할 수 있어요.</div>
       <div class="field">
         <input class="input" placeholder="입금자명 (입금할 때 쓰는 이름)" value="${esc(d.depositor)}" data-depositor aria-label="입금자명" />
       </div>
@@ -463,10 +467,9 @@ function Pay() {
       </div>
     </div>`, {
     title: "결제", back: "#/new/price",
-    cta: `<button class="btn btn-primary" data-submit ${ready ? "" : "disabled"}>${won(c.total)} 요청 보내기</button>`,
+    cta: `<button class="btn btn-primary" data-submit ${ready ? "" : "disabled"}>${won(c.total)} 요청서 보내기</button>`,
   });
 
-  bindCopy();
   const btn = $app.querySelector("[data-submit]");
   const refresh = () => { btn.disabled = !(d.agreed && d.depositor.trim()); };
   on("[data-depositor]", "input", (e) => { d.depositor = e.target.value; setDraft(d); refresh(); });
@@ -495,7 +498,7 @@ function Pay() {
       go(`#/done/${r.id}`);
     } catch (err) {
       toast("보내지 못했어요: " + err.message);
-      refresh(); btn.textContent = `${won(c.total)} 요청 보내기`;
+      refresh(); btn.textContent = `${won(c.total)} 요청서 보내기`;
     }
   });
 }
@@ -511,17 +514,14 @@ async function Done(id) {
     <div class="done-wrap">
       <div class="done-icon">${ICON.check}</div>
       <h1 style="font-size:24px;margin:0 0 10px">요청서를 보냈어요</h1>
-      <p class="muted" style="margin:0">아래 계좌로 입금해 주세요.<br/>에디터가 입금을 확인하면 진행판의 첫 단계가 채워져요</p>
-      <div style="text-align:left;margin-top:26px">
-        ${accountBox(r?.total)}
-        ${r ? `<p class="muted small" style="margin:10px 4px 0">입금자명: ${esc(r.depositor)}</p>` : ""}
-      </div>
+      <p class="muted" style="margin:0">에디터가 요청서를 확인하고 승인하면<br/>알림과 함께 진행판에서 입금 계좌가 열려요</p>
+      ${r ? `<div class="card" style="text-align:left;margin-top:26px"><div class="row"><span class="muted">총 금액</span><b>${won(r.total)}</b></div>
+        <div class="row" style="margin-top:6px"><span class="muted">입금자명</span><b>${esc(r.depositor)}</b></div></div>` : ""}
     </div>
     <div class="cta">
       <button class="btn btn-primary" data-progress>진행판 보기</button>
       <button class="btn-text" data-home>홈으로</button>
     </div>`;
-  bindCopy();
   on("[data-progress]", "click", () => go(`#/request/${id}`));
   on("[data-home]", "click", () => go("#/"));
 }
@@ -567,12 +567,16 @@ async function Progress(id) {
   const pendingRevision = r.client_note && r.revision_requested_at;
 
   let banner = "";
-  if (r.status === "awaiting_payment") {
-    banner = `<div class="card" style="margin-top:12px"><b>입금을 기다리고 있어요</b>
-      <p class="muted small" style="margin:4px 0 0">입금자명 <b style="color:#000">${esc(r.depositor)}</b> 으로 ${won(r.total)}을 보내 주세요. 확인되면 첫 단계가 채워져요.</p>
-      ${accountBox(r.total)}</div>`;
+  if (r.status === "pending_review") {
+    banner = `<div class="card" style="margin-top:12px"><b>에디터가 요청서를 확인하고 있어요</b>
+      <p class="muted small" style="margin:4px 0 0">승인되면 알림이 가고, 이 화면에 입금 계좌가 열려요. 요청 내용에 궁금한 점이 있으면 에디터가 메시지를 보낼 수 있어요.</p></div>`;
+  } else if (r.status === "awaiting_payment") {
+    const bank = await api.getBankAccount(id);
+    banner = `<div class="card" style="margin-top:12px"><b>요청서가 승인됐어요 · 입금해 주세요</b>
+      <p class="muted small" style="margin:4px 0 0">입금자명 <b style="color:#000">${esc(r.depositor)}</b> 으로 ${won(r.total)}을 보내 주세요. 입금이 확인되면 작업이 시작돼요.</p>
+      ${bank ? accountBox(r.total, bank) : '<div class="notice" style="margin-top:10px">계좌를 불러오지 못했어요. 새로고침하거나 에디터에게 메시지로 문의해 주세요.</div>'}</div>`;
   } else if (r.status === "cancelled") {
-    banner = '<div class="notice" style="margin-top:12px">이 의뢰는 취소되었어요. 궁금한 점은 에디터에게 문의해 주세요.</div>';
+    banner = `<div class="notice" style="margin-top:12px">${r.approved_at || r.stage > 0 ? "이 의뢰는 취소되었어요." : "이 요청서는 반려되었어요."}${r.cancel_reason ? `<br/>사유: ${esc(r.cancel_reason)}` : ""}<br/>궁금한 점은 에디터에게 메시지로 문의해 주세요.</div>`;
   }
 
   const preview = url ? `
@@ -666,7 +670,7 @@ async function MyPage() {
       <a class="card pick on" href="#/request/${esc(r.id)}" style="text-decoration:none">
         <div class="row"><b class="ellipsis">${esc(titleOf(r))}</b><b class="accent">${ddayText(r.deadline)}</b></div>
         <div class="bar"><i style="width:${Math.round((Math.max(0, r.stage) / 5) * 100)}%"></i></div>
-        <div class="muted small">${r.status === "awaiting_payment" ? "입금 확인 중" : `5단계 중 ${r.stage}단계 · ${STAGES[Math.max(0, r.stage - 1)]}`} · 진행판 보기</div>
+        <div class="muted small">${r.status === "pending_review" ? "승인 대기" : r.status === "awaiting_payment" ? "입금 확인 중" : `5단계 중 ${r.stage}단계 · ${STAGES[Math.max(0, r.stage - 1)]}`} · 진행판 보기</div>
       </a>`).join("") : '<div class="card empty">진행 중인 의뢰가 없어요</div>'}
 
     <div class="section-title">내 기본값</div>
@@ -745,7 +749,7 @@ async function MyPage() {
 // ---------------------------------------------------------
 // 알림함
 // ---------------------------------------------------------
-const NOTI_ICON = { message: "💬", stage: "🎬", confirmed: "✅", preview: "👀", cancelled: "⚠️", new_request: "📩", revision: "✏️", approved: "💗", delivered: "🎁", received: "📦", notice: "📢" };
+const NOTI_ICON = { message: "💬", stage: "🎬", confirmed: "✅", preview: "👀", cancelled: "⚠️", new_request: "📩", revision: "✏️", approved: "💗", delivered: "🎁", received: "📦", notice: "📢", approved_request: "🔓" };
 async function Notifications() {
   const list = await api.listNotifications(state.user);
   layout(`
@@ -960,11 +964,109 @@ async function EditorNotices() {
   });
 }
 
+// ---------------------------------------------------------
+// 회원·설정 (에디터)
+// ---------------------------------------------------------
+function avatarHtml(p, size = 44) {
+  const src = p.avatar_url && (p.avatar_url.startsWith("data:image/") ? p.avatar_url : safeUrl(p.avatar_url));
+  return `<span class="avatar" style="width:${size}px;height:${size}px;font-size:${Math.round(size / 2.6)}px;${src ? `background-image:url('${esc(src)}')` : ""}">${src ? "" : esc((p.nickname || "?").slice(0, 1))}</span>`;
+}
+
+async function EditorMembers() {
+  const [members, bank] = await Promise.all([api.listMembers(), api.getBankSettings().catch(() => null)]);
+  const q = (sessionStorage.getItem("ec-member-q") || "").trim();
+  const list = members.filter((m) => !q || (m.nickname || "").includes(q));
+  layout(`
+    ${editorTabs("members")}
+    <div class="section-title" style="margin-top:4px">입금 계좌</div>
+    <div class="card">
+      <p class="muted small" style="margin:0 0 10px">승인한 요청서의 의뢰인에게만 보여요.</p>
+      <div class="grid-2"><input class="input" placeholder="은행" value="${esc(bank?.name || "")}" data-bank-name /><input class="input" placeholder="예금주" value="${esc(bank?.holder || "")}" data-bank-holder /></div>
+      <input class="input field" placeholder="계좌번호" value="${esc(bank?.number || "")}" data-bank-number inputmode="numeric" />
+      <button class="btn-sub" style="margin-top:12px" data-bank-save>계좌 저장</button>
+    </div>
+
+    <div class="section-title">회원 ${members.length}명</div>
+    <input class="input" placeholder="닉네임으로 찾기" value="${esc(q)}" data-member-q />
+    <div style="margin-top:12px">
+      ${list.length ? list.map((m) => `
+        <a class="card member-row" href="#/editor/members/${esc(m.id)}" style="display:flex;gap:12px;align-items:center;text-decoration:none">
+          ${avatarHtml(m)}
+          <span style="min-width:0;flex:1">
+            <span class="row" style="justify-content:flex-start;gap:6px"><b class="ellipsis">${esc(m.nickname || "의뢰인")}</b>
+              ${m.is_editor ? '<span class="badge">에디터</span>' : ""}${m.blocked ? '<span class="badge red">이용 제한</span>' : ""}</span>
+            <span class="muted small" style="display:block">가입 ${fmtDate(String(m.created_at).slice(0, 10))} · 마지막 접속 ${m.last_sign_in_at ? fmtDateTime(m.last_sign_in_at) : "-"}</span>
+            <span class="muted small" style="display:block">의뢰 ${m.request_count}건 · 결제 ${won(m.total_paid)}${m.editor_note ? " · 📝 " + esc(m.editor_note.slice(0, 20)) : ""}</span>
+          </span>${ICON.right}
+        </a>`).join("") : '<div class="card empty">해당하는 회원이 없어요</div>'}
+    </div>
+  `, { title: "에디터 페이지", back: "#/me", wide: true, bell: true });
+  let t;
+  on("[data-member-q]", "input", (e) => { clearTimeout(t); const v = e.target.value; t = setTimeout(() => { sessionStorage.setItem("ec-member-q", v); EditorMembers().then(() => { const i = $app.querySelector("[data-member-q]"); i.focus(); i.setSelectionRange(v.length, v.length); }); }, 300); });
+  on("[data-bank-save]", "click", async (e) => {
+    const b = { name: $app.querySelector("[data-bank-name]").value.trim(), holder: $app.querySelector("[data-bank-holder]").value.trim(), number: $app.querySelector("[data-bank-number]").value.trim() };
+    if (!b.name || !b.holder || !b.number) { toast("은행, 예금주, 계좌번호를 모두 적어 주세요"); return; }
+    e.currentTarget.disabled = true;
+    try { await api.saveBankSettings(b); toast("입금 계좌를 저장했어요"); } catch (err) { toast("저장하지 못했어요: " + err.message); }
+    e.currentTarget.disabled = false;
+  });
+}
+
+async function MemberDetail(id) {
+  const [members, all] = await Promise.all([api.listMembers(), api.listAllRequests()]);
+  const m = members.find((x) => x.id === id);
+  if (!m) { layout('<div class="empty">회원을 찾을 수 없어요</div>', { title: "회원", back: "#/editor/members", wide: true }); return; }
+  const reqs = all.filter((r) => r.user_id === id);
+  layout(`
+    <div class="card" style="display:flex;gap:14px;align-items:center">
+      ${avatarHtml(m, 64)}
+      <div style="min-width:0;flex:1">
+        <div class="row" style="justify-content:flex-start;gap:6px"><b class="title-m ellipsis">${esc(m.nickname || "의뢰인")}</b>${m.is_editor ? '<span class="badge">에디터</span>' : ""}${m.blocked ? '<span class="badge red">이용 제한</span>' : ""}</div>
+        <div class="muted small">가입 ${fmtDateTime(m.created_at)}</div>
+        <div class="muted small">마지막 접속 ${m.last_sign_in_at ? fmtDateTime(m.last_sign_in_at) : "-"}</div>
+      </div>
+    </div>
+    <div class="grid-2" style="margin-top:12px">
+      <div class="card"><div class="muted small">의뢰</div><div class="big">${m.request_count}건</div></div>
+      <div class="card" style="margin-top:0"><div class="muted small">결제 확인 금액</div><div class="big">${won(m.total_paid)}</div></div>
+    </div>
+
+    <div class="section-title">메모 (나만 보기)</div>
+    <textarea class="textarea" placeholder="예: 단골, 자막 흰색 선호" data-m-note maxlength="1000">${esc(m.editor_note || "")}</textarea>
+    <button class="btn-sub" style="margin-top:10px" data-m-note-save>메모 저장</button>
+
+    <div class="section-title">이용 제한</div>
+    <div class="card">
+      <div class="row"><div><b>${m.blocked ? "이용 제한 중이에요" : "정상 이용 중"}</b><div class="muted small">제한하면 새 요청서를 보낼 수 없어요. 진행 중인 의뢰와 메시지는 그대로예요.</div></div>
+      ${m.is_editor ? "" : `<button class="btn-mini ${m.blocked ? "" : "danger"}" data-m-block>${m.blocked ? "제한 풀기" : "제한하기"}</button>`}</div>
+    </div>
+
+    <div class="section-title">의뢰 내역 ${reqs.length}건</div>
+    ${reqs.length ? reqs.map((r) => `
+      <a class="card" href="#/editor/${esc(r.id)}" style="display:block;text-decoration:none">
+        <div class="row"><b class="ellipsis">${esc(titleOf(r))}</b>${statusBadge(r)}</div>
+        <div class="muted small" style="margin-top:4px">접수 ${fmtDateTime(r.created_at)} · ${won(r.total)}</div>
+      </a>`).join("") : '<div class="card empty">아직 의뢰가 없어요</div>'}
+    <a class="btn btn-outline" href="#/editor/chat/${esc(reqs[0]?.id || "")}" style="margin-top:16px;height:48px;font-size:15px;text-decoration:none;${reqs.length ? "" : "display:none"}">${ICON.chat} 최근 의뢰로 메시지 보내기</a>
+  `, { title: "회원 정보", back: "#/editor/members", wide: true, bell: true });
+  on("[data-m-note-save]", "click", async () => {
+    try { await api.updateMember(id, { editor_note: $app.querySelector("[data-m-note]").value.trim() || null }); toast("메모를 저장했어요"); }
+    catch (err) { toast("저장하지 못했어요: " + err.message); }
+  });
+  on("[data-m-block]", "click", async () => {
+    const next = !m.blocked;
+    if (!confirm(next ? "이 회원의 이용을 제한할까요? 새 요청서를 보낼 수 없게 돼요." : "이용 제한을 풀까요?")) return;
+    try { await api.updateMember(id, { blocked: next }); toast(next ? "이용을 제한했어요" : "제한을 풀었어요"); MemberDetail(id); }
+    catch (err) { toast("바꾸지 못했어요: " + err.message); }
+  });
+}
+
 function editorTabs(active, unreadMsgs = 0) {
   return `<div class="seg">
     <a class="seg-btn ${active === "requests" ? "on" : ""}" href="#/editor">요청서</a>
     <a class="seg-btn ${active === "messages" ? "on" : ""}" href="#/editor/messages">메시지${unreadMsgs ? ` <span class="count-pill">${unreadMsgs > 9 ? "9+" : unreadMsgs}</span>` : ""}</a>
     <a class="seg-btn ${active === "notices" ? "on" : ""}" href="#/editor/notices">공지</a>
+    <a class="seg-btn ${active === "members" ? "on" : ""}" href="#/editor/members">회원·설정</a>
   </div>`;
 }
 
@@ -972,6 +1074,7 @@ function editorTabs(active, unreadMsgs = 0) {
 // 에디터 페이지
 // ---------------------------------------------------------
 const FILTERS = [
+  ["review", "승인 대기", (r) => r.status === "pending_review"],
   ["all", "전체", () => true],
   ["pay", "입금 확인 중", (r) => r.status === "awaiting_payment"],
   ["work", "진행 중", (r) => r.status === "confirmed" && r.stage < 5],
@@ -982,7 +1085,7 @@ const FILTERS = [
 
 async function EditorList() {
   const all = await api.listAllRequests();
-  const f = sessionStorage.getItem("ec-filter") || "pay";
+  const f = sessionStorage.getItem("ec-filter") || "review";
   const [, , fn] = FILTERS.find((x) => x[0] === f) || FILTERS[0];
   const list = all.filter(fn);
   const unreadMsgs = Object.values(await api.unreadMessageMap(state.user, "#/editor/chat/")).reduce((a, b) => a + b, 0);
@@ -1011,7 +1114,17 @@ async function EditorDetail(id) {
   const sources = (r.sources || []).map((s) => `${esc(s.time || "-")}  ${link(s.url || "")}`).join("<br/>") || "없음";
   const refs = (r.refs || []).map(link).join("<br/>") || "없음";
 
+  const reviewCard = r.status === "pending_review" ? `
+    <div class="card delivery" style="margin-bottom:16px">
+      <b class="title-m">요청서를 확인하고 승인해 주세요</b>
+      <p class="muted small" style="margin:6px 0 12px">승인하면 의뢰인에게 알림이 가고, 진행판에 입금 계좌(${esc(r.total ? won(r.total) : "")})가 열려요. 반려하면 의뢰인에게 사유와 함께 알려요.</p>
+      <div class="grid-2">
+        <button class="btn-sub" style="background:#f3f3f3" data-reject>반려하기</button>
+        <button class="btn btn-primary" style="height:40px;font-size:14px" data-approve-req>승인하기</button>
+      </div>
+    </div>` : "";
   layout(`
+    ${reviewCard}
     <div class="card">
       <div class="row"><span class="title-m">${esc(titleOf(r))}</span>${statusBadge(r)}</div>
       <div class="muted small" style="margin:4px 0 14px">${esc(r.profiles?.nickname || "의뢰인")} · 접수 ${fmtDateTime(r.created_at)}</div>
@@ -1039,7 +1152,7 @@ async function EditorDetail(id) {
       </dl>
       <div class="row" style="margin-top:14px;justify-content:flex-start;gap:8px;flex-wrap:wrap">
         ${r.status === "awaiting_payment" ? '<button class="btn-mini dark" data-confirm>입금 확인했어요</button>' : ""}
-        ${r.status !== "cancelled" ? '<button class="btn-mini danger" data-cancel>의뢰 취소</button>' : '<button class="btn-mini" data-restore>취소 되돌리기</button>'}
+        ${r.status === "pending_review" ? "" : r.status !== "cancelled" ? '<button class="btn-mini danger" data-cancel>의뢰 취소</button>' : '<button class="btn-mini" data-restore>취소 되돌리기</button>'}
       </div>
     </div>
 
@@ -1105,7 +1218,16 @@ async function EditorDetail(id) {
     upd({ status: "confirmed", stage: Math.max(1, r.stage), stage_dates: sd }, "입금 확인 완료 · 1단계(요청 확인)로 시작했어요");
   });
   on("[data-cancel]", "click", () => { if (confirm("이 의뢰를 취소 처리할까요? 환불은 직접 해 주세요.")) upd({ status: "cancelled" }, "취소 처리했어요"); });
-  on("[data-restore]", "click", () => upd({ status: r.stage > 0 ? "confirmed" : "awaiting_payment" }, "취소를 되돌렸어요"));
+  on("[data-restore]", "click", () => upd({ status: r.stage > 0 ? "confirmed" : r.approved_at ? "awaiting_payment" : "pending_review", cancel_reason: null }, "취소를 되돌렸어요"));
+  on("[data-approve-req]", "click", () => {
+    if (!confirm("이 요청서를 승인할까요? 의뢰인에게 입금 계좌가 보여요.")) return;
+    upd({ status: "awaiting_payment", approved_at: new Date().toISOString() }, "승인했어요 · 의뢰인에게 계좌가 열렸어요");
+  });
+  on("[data-reject]", "click", () => {
+    const reason = prompt("반려 사유를 적어 주세요 (의뢰인에게 보여요)", "일정상 이번 요청은 어려워요");
+    if (reason === null) return;
+    upd({ status: "cancelled", cancel_reason: reason.trim().slice(0, 300) || null }, "반려했어요 · 의뢰인에게 알렸어요");
+  });
   on("[data-deliver]", "click", () => {
     const url = $app.querySelector("[data-dv-url]").value.trim();
     const note = $app.querySelector("[data-dv-note]").value.trim();
@@ -1161,6 +1283,8 @@ const ROUTES = [
   [/^#\/editor$/, EditorList, true, true],
   [/^#\/editor\/messages$/, EditorInbox, true, true],
   [/^#\/editor\/notices$/, EditorNotices, true, true],
+  [/^#\/editor\/members$/, EditorMembers, true, true],
+  [/^#\/editor\/members\/([\w-]+)$/, MemberDetail, true, true],
   [/^#\/editor\/chat\/([\w-]+)$/, EditorChat, true, true],
   [/^#\/editor\/([\w-]+)$/, EditorDetail, true, true],
 ];
